@@ -6,13 +6,15 @@ This milestone establishes a clean, Dockerized project foundation for the Manufa
 
 ### Frontend
 
-The frontend is a React application built with Vite. It runs on port `3000` and provides a minimal dashboard that checks backend availability through `GET /health`.
+The frontend is a React application built with Vite. It runs on port `3000` and provides login, a protected dashboard, and data model management screens.
 
 ### Backend
 
 The backend is a Python FastAPI service. It runs on port `8000`, exposes OpenAPI documentation at `/docs`, configures local-development CORS, and includes a SQLAlchemy database connection foundation.
 
 The backend also provides JWT authentication and basic user management. Passwords are hashed with bcrypt and stored in the `users` table.
+
+Data model management stores business object metadata in the `data_models` table. Type A and Type B models are metadata-only in this milestone; generated tables and dynamic APIs are deferred.
 
 ### Database
 
@@ -26,7 +28,7 @@ Data is persisted in the Docker named volume `postgres_data`.
 
 ### Migration Layer
 
-Alembic is configured for future schema migrations. This foundation does not yet create application tables because data model management and automatic table creation are later milestones.
+Alembic manages the current `users` and `data_models` application tables. Automatic business table creation for Type A models is deferred.
 
 ### pgAdmin
 
@@ -42,16 +44,16 @@ Implemented:
 - JWT authentication
 - Basic user management APIs
 - Default admin user seeding
+- Data model metadata CRUD APIs
 - SQLAlchemy database connection setup
 - Alembic migration setup
 - React/Vite dashboard shell
-- Frontend login and protected dashboard
+- Frontend login, protected dashboard, and data model page
 - Local documentation
 
 Explicitly deferred:
 
 - Fine-grained role-based authorization
-- Data model CRUD
 - Automatic PostgreSQL table creation
 - Dynamic inbound REST APIs
 - Dynamic outbound REST APIs

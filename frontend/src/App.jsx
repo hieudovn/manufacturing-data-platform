@@ -1,8 +1,59 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import "./App.css";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 const TOKEN_KEY = "mdp_access_token";
+
+const emptyAttribute = {
+  name: "",
+  display_name: "",
+  data_type: "text",
+  required: false,
+  description: "",
+  is_primary_key: false,
+};
+
+const emptyDataModel = {
+  name: "",
+  display_name: "",
+  type: "A",
+  category: "",
+  description: "",
+  business_definition: "",
+  owner_department: "",
+  source_system: "",
+  primary_key: "",
+  sensitivity_level: "internal",
+  ai_enabled: true,
+  attributes: [{ ...emptyAttribute }],
+};
+
+function compactPayload(form) {
+  const attributes = form.attributes.map((attribute) => ({
+    name: attribute.name,
+    display_name: attribute.display_name || null,
+    data_type: attribute.data_type,
+    required: attribute.required,
+    description: attribute.description || null,
+    is_primary_key: attribute.is_primary_key,
+  }));
+  const primaryAttribute = attributes.find((attribute) => attribute.is_primary_key);
+
+  return {
+    name: form.name,
+    display_name: form.display_name,
+    type: form.type,
+    category: form.category || null,
+    description: form.description || null,
+    business_definition: form.business_definition || null,
+    owner_department: form.owner_department || null,
+    source_system: form.source_system || null,
+    primary_key: primaryAttribute?.name || form.primary_key || null,
+    sensitivity_level: form.sensitivity_level || "internal",
+    ai_enabled: form.ai_enabled,
+    attributes,
+  };
+}
 
 function App() {
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY));
@@ -12,6 +63,18 @@ function App() {
   const [password, setPassword] = useState("admin123");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [page, setPage] = useState("dashboard");
+  const [dataModels, setDataModels] = useState([]);
+  const [form, setForm] = useState(emptyDataModel);
+  const [editingId, setEditingId] = useState(null);
+  const [modelMessage, setModelMessage] = useState("");
+  const authHeaders = useMemo(
+    () => ({
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    }),
+    [token],
+  );
 
   useEffect(() => {
     async function loadHealth() {
@@ -66,6 +129,12 @@ function App() {
     };
   }, [token]);
 
+  useEffect(() => {
+    if (token && page === "data-models") {
+      loadDataModels();
+    }
+  }, [page, token]);
+
   async function handleLogin(event) {
     event.preventDefault();
     setIsLoading(true);
@@ -96,7 +165,111 @@ function App() {
     localStorage.removeItem(TOKEN_KEY);
     setToken(null);
     setCurrentUser(null);
+    setPage("dashboard");
     setError("");
+  }
+
+  async function loadDataModels() {
+    try {
+      const response = await fetch(`${API_BASE_URL}/data-models`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        throw new Error("Unable to load data models");
+      }
+      setDataModels(await response.json());
+    } catch (err) {
+      setModelMessage(err instanceof Error ? err.message : "Unable to load data models");
+    }
+  }
+
+  function resetForm() {
+    setForm({ ...emptyDataModel, attributes: [{ ...emptyAttribute }] });
+    setEditingId(null);
+    setModelMessage("");
+  }
+
+  function editModel(model) {
+    setEditingId(model.id);
+    setForm({
+      ...emptyDataModel,
+      ...model,
+      attributes: model.attributes.map((attribute) => ({
+        ...emptyAttribute,
+        ...attribute,
+      })),
+    });
+    setModelMessage("");
+  }
+
+  function updateAttribute(index, field, value) {
+    setForm((current) => ({
+      ...current,
+      attributes: current.attributes.map((attribute, attributeIndex) =>
+        attributeIndex === index ? { ...attribute, [field]: value } : attribute,
+      ),
+    }));
+  }
+
+  function addAttribute() {
+    setForm((current) => ({
+      ...current,
+      attributes: [...current.attributes, { ...emptyAttribute }],
+    }));
+  }
+
+  function removeAttribute(index) {
+    setForm((current) => ({
+      ...current,
+      attributes:
+        current.attributes.length === 1
+          ? current.attributes
+          : current.attributes.filter((_, attributeIndex) => attributeIndex !== index),
+    }));
+  }
+
+  async function saveDataModel(event) {
+    event.preventDefault();
+    setModelMessage("");
+    const method = editingId ? "PUT" : "POST";
+    const url = editingId
+      ? `${API_BASE_URL}/data-models/${editingId}`
+      : `${API_BASE_URL}/data-models`;
+
+    try {
+      const response = await fetch(url, {
+        method,
+        headers: authHeaders,
+        body: JSON.stringify(compactPayload(form)),
+      });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => null);
+        throw new Error(detail?.detail ? JSON.stringify(detail.detail) : "Save failed");
+      }
+
+      resetForm();
+      await loadDataModels();
+      setModelMessage(editingId ? "Data model updated." : "Data model created.");
+    } catch (err) {
+      setModelMessage(err instanceof Error ? err.message : "Save failed");
+    }
+  }
+
+  async function deactivateModel(modelId) {
+    setModelMessage("");
+    try {
+      const response = await fetch(`${API_BASE_URL}/data-models/${modelId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        throw new Error("Deactivate failed");
+      }
+      await loadDataModels();
+      setModelMessage("Data model deactivated.");
+    } catch (err) {
+      setModelMessage(err instanceof Error ? err.message : "Deactivate failed");
+    }
   }
 
   if (!token) {
@@ -140,41 +313,274 @@ function App() {
       <section className="dashboard__header">
         <div>
           <p className="eyebrow">Manufacturing Data Platform</p>
-          <h1>Operations Dashboard</h1>
+          <h1>{page === "dashboard" ? "Operations Dashboard" : "Data Models"}</h1>
           <p className="summary">
             Authenticated workspace for configurable manufacturing data services.
           </p>
         </div>
-        <button className="secondary-button" type="button" onClick={handleLogout}>
-          Logout
-        </button>
+        <div className="top-actions">
+          <button type="button" onClick={() => setPage("dashboard")}>
+            Dashboard
+          </button>
+          <button type="button" onClick={() => setPage("data-models")}>
+            Data Models
+          </button>
+          <button className="secondary-button" type="button" onClick={handleLogout}>
+            Logout
+          </button>
+        </div>
       </section>
 
-      <section className="panel-grid">
-        <article className="status-panel" aria-label="Current user">
-          <p className="panel-label">Current User</p>
-          <h2>{currentUser?.full_name || currentUser?.username || "Loading..."}</h2>
-          <dl>
-            <div>
-              <dt>Email</dt>
-              <dd>{currentUser?.email || "-"}</dd>
-            </div>
-            <div>
-              <dt>Role</dt>
-              <dd>{currentUser?.role || "-"}</dd>
-            </div>
-          </dl>
-        </article>
-
-        <article className="status-panel" aria-label="Backend service status">
-          <p className="panel-label">Backend API</p>
-          <h2>{health?.service || "manufacturing-data-platform"}</h2>
-          <span className={health ? "status-pill status-pill--ok" : "status-pill"}>
-            {health ? health.status : "unavailable"}
-          </span>
-        </article>
-      </section>
+      {page === "dashboard" ? (
+        <Dashboard currentUser={currentUser} health={health} />
+      ) : (
+        <DataModelsPage
+          dataModels={dataModels}
+          form={form}
+          setForm={setForm}
+          editingId={editingId}
+          modelMessage={modelMessage}
+          saveDataModel={saveDataModel}
+          resetForm={resetForm}
+          editModel={editModel}
+          deactivateModel={deactivateModel}
+          updateAttribute={updateAttribute}
+          addAttribute={addAttribute}
+          removeAttribute={removeAttribute}
+        />
+      )}
     </main>
+  );
+}
+
+function Dashboard({ currentUser, health }) {
+  return (
+    <section className="panel-grid">
+      <article className="status-panel" aria-label="Current user">
+        <p className="panel-label">Current User</p>
+        <h2>{currentUser?.full_name || currentUser?.username || "Loading..."}</h2>
+        <dl>
+          <div>
+            <dt>Email</dt>
+            <dd>{currentUser?.email || "-"}</dd>
+          </div>
+          <div>
+            <dt>Role</dt>
+            <dd>{currentUser?.role || "-"}</dd>
+          </div>
+        </dl>
+      </article>
+
+      <article className="status-panel" aria-label="Backend service status">
+        <p className="panel-label">Backend API</p>
+        <h2>{health?.service || "manufacturing-data-platform"}</h2>
+        <span className={health ? "status-pill status-pill--ok" : "status-pill"}>
+          {health ? health.status : "unavailable"}
+        </span>
+      </article>
+    </section>
+  );
+}
+
+function DataModelsPage({
+  dataModels,
+  form,
+  setForm,
+  editingId,
+  modelMessage,
+  saveDataModel,
+  resetForm,
+  editModel,
+  deactivateModel,
+  updateAttribute,
+  addAttribute,
+  removeAttribute,
+}) {
+  return (
+    <section className="data-model-layout">
+      <form className="model-form" onSubmit={saveDataModel}>
+        <div className="section-heading">
+          <p className="panel-label">{editingId ? "Edit Model" : "Create Model"}</p>
+          <button type="button" onClick={resetForm}>
+            New
+          </button>
+        </div>
+
+        <div className="form-grid">
+          <label>
+            Name
+            <input
+              value={form.name}
+              onChange={(event) => setForm({ ...form, name: event.target.value })}
+              placeholder="invoice"
+              required
+            />
+          </label>
+          <label>
+            Display Name
+            <input
+              value={form.display_name}
+              onChange={(event) => setForm({ ...form, display_name: event.target.value })}
+              placeholder="Invoice"
+              required
+            />
+          </label>
+          <label>
+            Type
+            <select
+              value={form.type}
+              onChange={(event) => setForm({ ...form, type: event.target.value })}
+            >
+              <option value="A">Type A</option>
+              <option value="B">Type B</option>
+            </select>
+          </label>
+          <label>
+            Category
+            <input
+              value={form.category || ""}
+              onChange={(event) => setForm({ ...form, category: event.target.value })}
+              placeholder="finance"
+            />
+          </label>
+          <label>
+            Owner Department
+            <input
+              value={form.owner_department || ""}
+              onChange={(event) =>
+                setForm({ ...form, owner_department: event.target.value })
+              }
+              placeholder="Finance"
+            />
+          </label>
+          <label>
+            Source System
+            <input
+              value={form.source_system || ""}
+              onChange={(event) => setForm({ ...form, source_system: event.target.value })}
+              placeholder="External API"
+            />
+          </label>
+        </div>
+
+        <label>
+          Description
+          <textarea
+            value={form.description || ""}
+            onChange={(event) => setForm({ ...form, description: event.target.value })}
+          />
+        </label>
+
+        <label className="toggle-row">
+          <input
+            type="checkbox"
+            checked={form.ai_enabled}
+            onChange={(event) => setForm({ ...form, ai_enabled: event.target.checked })}
+          />
+          AI enabled
+        </label>
+
+        <div className="section-heading">
+          <p className="panel-label">Attributes</p>
+          <button type="button" onClick={addAttribute}>
+            Add Attribute
+          </button>
+        </div>
+
+        <div className="attribute-list">
+          {form.attributes.map((attribute, index) => (
+            <div className="attribute-row" key={index}>
+              <input
+                value={attribute.name}
+                onChange={(event) => updateAttribute(index, "name", event.target.value)}
+                placeholder="invoice_no"
+                required
+              />
+              <input
+                value={attribute.display_name || ""}
+                onChange={(event) =>
+                  updateAttribute(index, "display_name", event.target.value)
+                }
+                placeholder="Invoice Number"
+              />
+              <select
+                value={attribute.data_type}
+                onChange={(event) => updateAttribute(index, "data_type", event.target.value)}
+              >
+                <option value="text">text</option>
+                <option value="integer">integer</option>
+                <option value="float">float</option>
+                <option value="boolean">boolean</option>
+                <option value="date">date</option>
+                <option value="datetime">datetime</option>
+                <option value="json">json</option>
+              </select>
+              <label className="compact-check">
+                <input
+                  type="checkbox"
+                  checked={attribute.required}
+                  onChange={(event) =>
+                    updateAttribute(index, "required", event.target.checked)
+                  }
+                />
+                Required
+              </label>
+              <label className="compact-check">
+                <input
+                  type="checkbox"
+                  checked={attribute.is_primary_key}
+                  onChange={(event) =>
+                    updateAttribute(index, "is_primary_key", event.target.checked)
+                  }
+                />
+                PK
+              </label>
+              <textarea
+                value={attribute.description || ""}
+                onChange={(event) =>
+                  updateAttribute(index, "description", event.target.value)
+                }
+                placeholder="Description"
+              />
+              <button type="button" onClick={() => removeAttribute(index)}>
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <button className="primary-button" type="submit">
+          {editingId ? "Update Data Model" : "Create Data Model"}
+        </button>
+        {modelMessage && <p className="form-message">{modelMessage}</p>}
+      </form>
+
+      <section className="model-list">
+        {dataModels.map((model) => (
+          <article className="model-item" key={model.id}>
+            <div>
+              <p className="panel-label">
+                Type {model.type} · {model.status}
+              </p>
+              <h2>{model.display_name}</h2>
+              <p>{model.description || model.name}</p>
+            </div>
+            <div className="item-actions">
+              <button type="button" onClick={() => editModel(model)}>
+                Edit
+              </button>
+              <button
+                type="button"
+                onClick={() => deactivateModel(model.id)}
+                disabled={model.status === "inactive"}
+              >
+                Deactivate
+              </button>
+            </div>
+          </article>
+        ))}
+      </section>
+    </section>
   );
 }
 

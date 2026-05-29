@@ -1,8 +1,8 @@
 # Manufacturing Data Platform
 
-Manufacturing Data Platform is a Dockerized monorepo MVP foundation for configurable manufacturing data services. This milestone provides only the clean project base: FastAPI backend, React/Vite frontend, PostgreSQL 16, SQLAlchemy, Alembic, Docker Compose, and pgAdmin.
+Manufacturing Data Platform is a Dockerized monorepo MVP foundation for configurable manufacturing data services. The current milestone includes FastAPI, React/Vite, PostgreSQL 16, SQLAlchemy, Alembic, Docker Compose, pgAdmin, JWT authentication, user management, and data model metadata CRUD.
 
-Data model CRUD, automatic table creation, dynamic inbound APIs, and dynamic outbound APIs are intentionally not implemented yet.
+Automatic table creation, dynamic inbound APIs, and dynamic outbound APIs are intentionally not implemented yet.
 
 ## Architecture Summary
 
@@ -11,7 +11,7 @@ Data model CRUD, automatic table creation, dynamic inbound APIs, and dynamic out
 - `postgres`: PostgreSQL 16 database with a named Docker volume
 - `pgadmin`: Optional database administration UI on port `5050`
 
-The frontend calls the backend `GET /health` endpoint and displays the backend service status.
+The frontend supports login, a protected dashboard, and a basic data model management page.
 
 Authentication is implemented with bcrypt password hashing and JWT bearer tokens. A default admin user is seeded on backend startup when no users exist.
 
@@ -89,7 +89,7 @@ Expected response:
 }
 ```
 
-Alembic is configured under `backend/alembic`. No domain migrations are included in this foundation milestone.
+Alembic is configured under `backend/alembic` for users and data model metadata tables.
 
 ## Authentication
 
@@ -116,6 +116,44 @@ Use the token with protected APIs:
 curl http://localhost:8000/auth/me \
   -H "Authorization: Bearer <token>"
 ```
+
+## Data Model Management
+
+All `/data-models` endpoints require a JWT bearer token.
+
+Create a Type A ingested model:
+
+```bash
+curl -X POST http://localhost:8000/data-models \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d "{\"name\":\"invoice\",\"display_name\":\"Invoice\",\"type\":\"A\",\"primary_key\":\"invoice_no\",\"attributes\":[{\"name\":\"invoice_no\",\"display_name\":\"Invoice Number\",\"data_type\":\"text\",\"required\":true,\"is_primary_key\":true}]}"
+```
+
+List active Type A models:
+
+```bash
+curl "http://localhost:8000/data-models?status=active&type=A" \
+  -H "Authorization: Bearer <token>"
+```
+
+Update a model:
+
+```bash
+curl -X PUT http://localhost:8000/data-models/<id> \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d "{\"display_name\":\"Supplier Invoice\"}"
+```
+
+Deactivate a model:
+
+```bash
+curl -X DELETE http://localhost:8000/data-models/<id> \
+  -H "Authorization: Bearer <token>"
+```
+
+This milestone stores model metadata only. It does not create physical PostgreSQL model tables and does not expose dynamic inbound or outbound APIs yet.
 
 ## Testing Auth In Swagger UI
 
