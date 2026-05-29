@@ -1,0 +1,56 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: mdp-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-mdp}
+      POSTGRES_USER: ${POSTGRES_USER:-mdp_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mdp_password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mdp_user} -d ${POSTGRES_DB:-mdp}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+    container_name: mdp-backend
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://mdp_user:mdp_password@postgres:5432/mdp}
+      CORS_ORIGINS: ${CORS_ORIGINS:-["http://localhost:3000","http://127.0.0.1:3000"]}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: mdp-frontend
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+  pgadmin:
+    image: dpage/pgadmin4:8
+    container_name: mdp-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:
+

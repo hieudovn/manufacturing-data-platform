@@ -1,0 +1,114 @@
+:root {
+  color: #172026;
+  background: #f4f7f9;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+.dashboard {
+  width: min(1040px, calc(100% - 40px));
+  margin: 0 auto;
+  padding: 64px 0;
+}
+
+.dashboard__header {
+  max-width: 720px;
+}
+
+.eyebrow,
+.panel-label {
+  margin: 0 0 10px;
+  color: #596975;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 0;
+  color: #101820;
+  font-size: clamp(2.4rem, 6vw, 4.8rem);
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.summary {
+  margin: 24px 0 0;
+  color: #3f4e59;
+  font-size: 1.1rem;
+  line-height: 1.7;
+}
+
+.status-panel {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 20px;
+  align-items: start;
+  margin-top: 48px;
+  padding: 28px;
+  border: 1px solid #d6e0e7;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 18px 50px rgba(26, 42, 53, 0.08);
+}
+
+.status-panel h2 {
+  margin: 0;
+  color: #15222b;
+  font-size: 1.35rem;
+  letter-spacing: 0;
+}
+
+.status-pill {
+  min-width: 112px;
+  padding: 8px 12px;
+  border: 1px solid #b6c4cf;
+  border-radius: 999px;
+  color: #495966;
+  background: #f7fafc;
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.status-pill--ok {
+  border-color: #7bb899;
+  color: #14552f;
+  background: #e9f7ee;
+}
+
+.error-text {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #a33b2e;
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .dashboard {
+    width: min(100% - 28px, 1040px);
+    padding: 40px 0;
+  }
+
+  .status-panel {
+    grid-template-columns: 1fr;
+    padding: 22px;
+  }
+
+  .status-pill {
+    width: fit-content;
+  }
+}
+
