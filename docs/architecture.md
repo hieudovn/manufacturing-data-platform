@@ -12,6 +12,8 @@ The frontend is a React application built with Vite. It runs on port `3000` and 
 
 The backend is a Python FastAPI service. It runs on port `8000`, exposes OpenAPI documentation at `/docs`, configures local-development CORS, and includes a SQLAlchemy database connection foundation.
 
+The backend also provides JWT authentication and basic user management. Passwords are hashed with bcrypt and stored in the `users` table.
+
 ### Database
 
 PostgreSQL 16 is the primary application database. It uses the default MVP database settings:
@@ -37,15 +39,18 @@ Implemented:
 - Docker Compose orchestration
 - FastAPI app shell
 - Health check endpoint
+- JWT authentication
+- Basic user management APIs
+- Default admin user seeding
 - SQLAlchemy database connection setup
 - Alembic migration setup
 - React/Vite dashboard shell
-- Frontend-to-backend health check
+- Frontend login and protected dashboard
 - Local documentation
 
 Explicitly deferred:
 
-- Authentication and authorization
+- Fine-grained role-based authorization
 - Data model CRUD
 - Automatic PostgreSQL table creation
 - Dynamic inbound REST APIs
@@ -61,4 +66,3 @@ Explicitly deferred:
 4. Browser users open `http://localhost:3000`.
 5. The dashboard calls `http://localhost:8000/health`.
 6. FastAPI returns the backend service status.
-
