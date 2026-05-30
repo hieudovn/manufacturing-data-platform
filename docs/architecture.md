@@ -6,7 +6,7 @@ This milestone establishes a clean, Dockerized project foundation for the Manufa
 
 ### Frontend
 
-The frontend is a React application built with Vite. It runs on port `3000` and provides login, a protected dashboard, data model management, data browsing, transaction viewing, and API key management screens.
+The frontend is a React application built with Vite. It runs on port `3000` and provides login, a protected dashboard, data model management, data browsing, transaction viewing, API key management, and connection management screens.
 
 ### Backend
 
@@ -21,6 +21,8 @@ Dynamic inbound REST APIs accept authenticated flat JSON payloads for active Typ
 Dynamic outbound REST APIs expose integrated Type A data through model-based endpoints without exposing raw tables or accepting user SQL.
 
 Inbound and outbound APIs accept either a valid user JWT or a scoped API key. API keys can be limited by direction and data model.
+
+The Connection Manager stores external system connection metadata for PostgreSQL, Oracle, SQL Server, REST API, and MQTT endpoints. Passwords are encrypted before storage and are never returned by API responses. These records are intended for later sync jobs, mapping, migration, and Type B linked model features.
 
 ### Database
 
@@ -56,6 +58,7 @@ Implemented:
 - Dynamic outbound REST API for Type A models
 - Transaction logging and transaction read APIs
 - API key management and scoped API key authentication
+- Connection metadata CRUD and basic connection testing
 - SQLAlchemy database connection setup
 - Alembic migration setup
 - React/Vite dashboard shell
@@ -69,6 +72,8 @@ Explicitly deferred:
 - Generated table archival/drop policy
 - API key rotation workflows
 - External API key self-service
+- Connection-driven sync jobs
+- External table browsing
 - ERP and SQL Server integration
 - Time-series databases, TimescaleDB, IIoT, sensor data, and realtime telemetry
 

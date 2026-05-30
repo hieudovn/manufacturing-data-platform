@@ -20,3 +20,11 @@ docker compose down
 
 Cloud deployment details are deferred until after the local MVP foundation is validated.
 
+## Required Secrets
+
+Set these values in `.env` or the target deployment environment:
+
+- `JWT_SECRET_KEY`: signs user JWT access tokens.
+- `CONNECTION_SECRET_KEY`: encrypts external connection passwords.
+
+Use deployment-specific values for cloud environments. Do not reuse the example `change_me` defaults outside local development.

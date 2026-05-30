@@ -1,6 +1,6 @@
 # Manufacturing Data Platform
 
-Manufacturing Data Platform is a Dockerized monorepo MVP foundation for configurable manufacturing data services. The current milestone includes FastAPI, React/Vite, PostgreSQL 16, SQLAlchemy, Alembic, Docker Compose, pgAdmin, JWT authentication, user management, data model metadata CRUD, generated Type A storage tables, dynamic inbound/outbound APIs, transaction logging, and API key authentication for external systems.
+Manufacturing Data Platform is a Dockerized monorepo MVP foundation for configurable manufacturing data services. The current milestone includes FastAPI, React/Vite, PostgreSQL 16, SQLAlchemy, Alembic, Docker Compose, pgAdmin, JWT authentication, user management, data model metadata CRUD, generated Type A storage tables, dynamic inbound/outbound APIs, transaction logging, API key authentication for external systems, and external connection metadata management.
 
 ## Architecture Summary
 
@@ -9,7 +9,7 @@ Manufacturing Data Platform is a Dockerized monorepo MVP foundation for configur
 - `postgres`: PostgreSQL 16 database with a named Docker volume
 - `pgadmin`: Optional database administration UI on port `5050`
 
-The frontend supports login, a protected dashboard, data model management, transaction viewing, data browsing, and API key management.
+The frontend supports login, a protected dashboard, data model management, transaction viewing, data browsing, API key management, and connection management.
 
 Authentication is implemented with bcrypt password hashing and JWT bearer tokens. A default admin user is seeded on backend startup when no users exist.
 
@@ -326,6 +326,61 @@ curl http://localhost:8000/outbound/quality_result/QR-001 \
 ```
 
 API keys can be scoped by direction (`inbound`, `outbound`) and model names. Null or empty `allowed_models` means all models are allowed. Transaction logs record whether the request used JWT or API key authentication.
+
+## Connection Manager
+
+Authenticated users can manage external system connection metadata through:
+
+```text
+POST /connections
+GET /connections
+GET /connections/{id}
+PUT /connections/{id}
+DELETE /connections/{id}
+POST /connections/{id}/test
+```
+
+Supported connection types:
+
+- `postgresql`
+- `oracle`
+- `sqlserver`
+- `rest_api`
+- `mqtt`
+
+Connection passwords are encrypted with Fernet before storage using `CONNECTION_SECRET_KEY`. API responses never return `password` or `encrypted_password`.
+
+Example PostgreSQL connection:
+
+```bash
+curl -X POST http://localhost:8000/connections \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d "{\"name\":\"plant_postgres\",\"type\":\"postgresql\",\"host\":\"postgres\",\"port\":5432,\"database_name\":\"mdp\",\"username\":\"mdp_user\",\"password\":\"mdp_password\"}"
+```
+
+Example Oracle JDE connection metadata:
+
+```json
+{
+  "name": "jde_production",
+  "type": "oracle",
+  "host": "jde-db.company.local",
+  "port": 1521,
+  "database_name": "JDEPROD",
+  "username": "jde_readonly",
+  "password": "<password>",
+  "description": "JDE ERP production Oracle database"
+}
+```
+
+Current limitations:
+
+- Connection records are metadata only until sync jobs and mapping features are added.
+- Oracle tests require the Oracle Python driver and client/network configuration.
+- SQL Server tests require `pyodbc` and a compatible ODBC driver.
+- MQTT testing currently validates metadata only.
+- No table browsing, migration, sync jobs, or Type B query mapping are implemented yet.
 
 ## Testing Auth In Swagger UI
 

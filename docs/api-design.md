@@ -251,3 +251,41 @@ Transaction APIs require a valid JWT:
 - `data_model_id`
 - `limit`
 - `offset`
+
+## Connections
+
+Connection Manager endpoints require JWT authentication:
+
+- `POST /connections`
+- `GET /connections`
+- `GET /connections/{id}`
+- `PUT /connections/{id}`
+- `DELETE /connections/{id}`
+- `POST /connections/{id}/test`
+
+Supported `type` values:
+
+- `postgresql`
+- `oracle`
+- `sqlserver`
+- `rest_api`
+- `mqtt`
+
+`GET /connections` supports filters:
+
+- `type`
+- `status`
+
+Security rules:
+
+- Passwords are encrypted before storage.
+- API responses never return `password` or `encrypted_password`.
+- `DELETE /connections/{id}` is a soft delete that sets `status` to `inactive`.
+
+Testing behavior:
+
+- PostgreSQL runs `SELECT 1`.
+- REST API sends `GET` to `base_url` with a timeout.
+- Oracle returns a clear unavailable-driver message when `python-oracledb` is missing or not configured.
+- SQL Server returns a clear unavailable-driver message when `pyodbc` or an ODBC driver is missing.
+- MQTT validates metadata only in this milestone.

@@ -28,6 +28,21 @@ const emptyDataModel = {
   attributes: [{ ...emptyAttribute }],
 };
 
+const emptyConnection = {
+  name: "",
+  type: "postgresql",
+  description: "",
+  host: "",
+  port: 5432,
+  database_name: "",
+  username: "",
+  password: "",
+  base_url: "",
+  mqtt_topic_prefix: "",
+  config: "{}",
+  status: "active",
+};
+
 function compactPayload(form) {
   const attributes = form.attributes.map((attribute) => ({
     name: attribute.name,
@@ -86,6 +101,10 @@ function App() {
   const [editingApiKeyId, setEditingApiKeyId] = useState(null);
   const [createdPlainApiKey, setCreatedPlainApiKey] = useState("");
   const [apiKeyMessage, setApiKeyMessage] = useState("");
+  const [connections, setConnections] = useState([]);
+  const [connectionForm, setConnectionForm] = useState(emptyConnection);
+  const [editingConnectionId, setEditingConnectionId] = useState(null);
+  const [connectionMessage, setConnectionMessage] = useState("");
   const [form, setForm] = useState(emptyDataModel);
   const [editingId, setEditingId] = useState(null);
   const [modelMessage, setModelMessage] = useState("");
@@ -162,6 +181,9 @@ function App() {
     }
     if (token && page === "api-keys") {
       loadApiKeys();
+    }
+    if (token && page === "connections") {
+      loadConnections();
     }
   }, [page, token]);
 
@@ -366,6 +388,124 @@ function App() {
     }
   }
 
+  async function loadConnections() {
+    try {
+      const response = await fetch(`${API_BASE_URL}/connections`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        throw new Error("Unable to load connections");
+      }
+      setConnections(await response.json());
+    } catch (err) {
+      setConnectionMessage(err instanceof Error ? err.message : "Unable to load connections");
+    }
+  }
+
+  function resetConnectionForm() {
+    setEditingConnectionId(null);
+    setConnectionForm({ ...emptyConnection });
+    setConnectionMessage("");
+  }
+
+  function editConnection(connection) {
+    setEditingConnectionId(connection.id);
+    setConnectionForm({
+      ...emptyConnection,
+      ...connection,
+      password: "",
+      config: connection.config ? JSON.stringify(connection.config, null, 2) : "{}",
+    });
+    setConnectionMessage("");
+  }
+
+  function buildConnectionPayload() {
+    let parsedConfig = null;
+    if (connectionForm.config.trim()) {
+      parsedConfig = JSON.parse(connectionForm.config);
+    }
+    return {
+      name: connectionForm.name,
+      type: connectionForm.type,
+      description: connectionForm.description || null,
+      host: connectionForm.host || null,
+      port: connectionForm.port ? Number(connectionForm.port) : null,
+      database_name: connectionForm.database_name || null,
+      username: connectionForm.username || null,
+      password: connectionForm.password || undefined,
+      base_url: connectionForm.base_url || null,
+      mqtt_topic_prefix: connectionForm.mqtt_topic_prefix || null,
+      config: parsedConfig,
+      status: connectionForm.status || "active",
+    };
+  }
+
+  async function saveConnection(event) {
+    event.preventDefault();
+    setConnectionMessage("");
+    let payload;
+    try {
+      payload = buildConnectionPayload();
+    } catch {
+      setConnectionMessage("Config must be valid JSON.");
+      return;
+    }
+    const url = editingConnectionId
+      ? `${API_BASE_URL}/connections/${editingConnectionId}`
+      : `${API_BASE_URL}/connections`;
+    const method = editingConnectionId ? "PUT" : "POST";
+    try {
+      const response = await fetch(url, {
+        method,
+        headers: authHeaders,
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => null);
+        throw new Error(detail?.detail ? JSON.stringify(detail.detail) : "Unable to save connection");
+      }
+      resetConnectionForm();
+      await loadConnections();
+      setConnectionMessage(editingConnectionId ? "Connection updated." : "Connection created.");
+    } catch (err) {
+      setConnectionMessage(err instanceof Error ? err.message : "Unable to save connection");
+    }
+  }
+
+  async function deactivateConnection(connectionId) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/connections/${connectionId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        throw new Error("Unable to deactivate connection");
+      }
+      await loadConnections();
+      setConnectionMessage("Connection deactivated.");
+    } catch (err) {
+      setConnectionMessage(err instanceof Error ? err.message : "Unable to deactivate connection");
+    }
+  }
+
+  async function testConnection(connectionId) {
+    setConnectionMessage("");
+    try {
+      const response = await fetch(`${API_BASE_URL}/connections/${connectionId}/test`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        throw new Error("Unable to test connection");
+      }
+      const data = await response.json();
+      await loadConnections();
+      setConnectionMessage(`${data.status}: ${data.message}`);
+    } catch (err) {
+      setConnectionMessage(err instanceof Error ? err.message : "Unable to test connection");
+    }
+  }
+
   function resetForm() {
     setForm({ ...emptyDataModel, attributes: [{ ...emptyAttribute }] });
     setEditingId(null);
@@ -505,7 +645,9 @@ function App() {
                   ? "Data Browser"
                   : page === "api-keys"
                     ? "API Keys"
-                    : "Transactions"}
+                    : page === "connections"
+                      ? "Connections"
+                      : "Transactions"}
           </h1>
           <p className="summary">
             Authenticated workspace for configurable manufacturing data services.
@@ -523,6 +665,9 @@ function App() {
           </button>
           <button type="button" onClick={() => setPage("api-keys")}>
             API Keys
+          </button>
+          <button type="button" onClick={() => setPage("connections")}>
+            Connections
           </button>
           <button type="button" onClick={() => setPage("transactions")}>
             Transactions
@@ -575,6 +720,19 @@ function App() {
           resetForm={resetApiKeyForm}
           editApiKey={editApiKey}
           deactivateApiKey={deactivateApiKey}
+        />
+      ) : page === "connections" ? (
+        <ConnectionsPage
+          connections={connections}
+          form={connectionForm}
+          setForm={setConnectionForm}
+          editingId={editingConnectionId}
+          message={connectionMessage}
+          saveConnection={saveConnection}
+          resetForm={resetConnectionForm}
+          editConnection={editConnection}
+          deactivateConnection={deactivateConnection}
+          testConnection={testConnection}
         />
       ) : (
         <TransactionsPage
@@ -1066,6 +1224,135 @@ function ApiKeysPage({
             <div className="item-actions">
               <button type="button" onClick={() => editApiKey(apiKey)}>Edit</button>
               <button type="button" onClick={() => deactivateApiKey(apiKey.id)} disabled={!apiKey.is_active}>Deactivate</button>
+            </div>
+          </article>
+        ))}
+      </section>
+    </section>
+  );
+}
+
+function ConnectionsPage({
+  connections,
+  form,
+  setForm,
+  editingId,
+  message,
+  saveConnection,
+  resetForm,
+  editConnection,
+  deactivateConnection,
+  testConnection,
+}) {
+  const isDatabase = ["postgresql", "oracle", "sqlserver"].includes(form.type);
+  const isRestApi = form.type === "rest_api";
+  const isMqtt = form.type === "mqtt";
+
+  return (
+    <section className="connections-layout">
+      <form className="model-form" onSubmit={saveConnection}>
+        <div className="section-heading">
+          <p className="panel-label">{editingId ? "Edit Connection" : "Create Connection"}</p>
+          <button type="button" onClick={resetForm}>New</button>
+        </div>
+
+        <div className="form-grid">
+          <label>
+            Name
+            <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="jde_production" required />
+          </label>
+          <label>
+            Type
+            <select value={form.type} onChange={(event) => setForm({ ...form, type: event.target.value })}>
+              <option value="postgresql">PostgreSQL</option>
+              <option value="oracle">Oracle</option>
+              <option value="sqlserver">SQL Server</option>
+              <option value="rest_api">REST API</option>
+              <option value="mqtt">MQTT</option>
+            </select>
+          </label>
+          {(isDatabase || isMqtt) && (
+            <>
+              <label>
+                Host
+                <input value={form.host || ""} onChange={(event) => setForm({ ...form, host: event.target.value })} placeholder="db.example.local" />
+              </label>
+              <label>
+                Port
+                <input type="number" min="1" max="65535" value={form.port || ""} onChange={(event) => setForm({ ...form, port: event.target.value })} />
+              </label>
+            </>
+          )}
+          {isDatabase && (
+            <>
+              <label>
+                Database Name
+                <input value={form.database_name || ""} onChange={(event) => setForm({ ...form, database_name: event.target.value })} placeholder="JDEPROD" />
+              </label>
+              <label>
+                Username
+                <input value={form.username || ""} onChange={(event) => setForm({ ...form, username: event.target.value })} />
+              </label>
+              <label>
+                Password
+                <input type="password" value={form.password || ""} onChange={(event) => setForm({ ...form, password: event.target.value })} placeholder={editingId ? "Leave blank to keep current password" : ""} />
+              </label>
+            </>
+          )}
+          {isRestApi && (
+            <label>
+              Base URL
+              <input value={form.base_url || ""} onChange={(event) => setForm({ ...form, base_url: event.target.value })} placeholder="https://api.example.com/health" />
+            </label>
+          )}
+          {isMqtt && (
+            <label>
+              MQTT Topic Prefix
+              <input value={form.mqtt_topic_prefix || ""} onChange={(event) => setForm({ ...form, mqtt_topic_prefix: event.target.value })} placeholder="plant/site1" />
+            </label>
+          )}
+          <label>
+            Status
+            <select value={form.status || "active"} onChange={(event) => setForm({ ...form, status: event.target.value })}>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </label>
+        </div>
+
+        <label>
+          Description
+          <textarea value={form.description || ""} onChange={(event) => setForm({ ...form, description: event.target.value })} />
+        </label>
+
+        <label>
+          Config JSON
+          <textarea value={form.config || "{}"} onChange={(event) => setForm({ ...form, config: event.target.value })} />
+        </label>
+
+        <button className="primary-button" type="submit">{editingId ? "Update Connection" : "Create Connection"}</button>
+        {message && <p className="form-message">{message}</p>}
+      </form>
+
+      <section className="model-list">
+        {connections.map((connection) => (
+          <article className="model-item" key={connection.id}>
+            <div>
+              <p className="panel-label">{connection.type} - {connection.status}</p>
+              <h2>{connection.name}</h2>
+              <p>{connection.description || connection.host || connection.base_url || "No endpoint details"}</p>
+              <p className="table-name">
+                last test: {connection.last_test_status || "not tested"}
+                {connection.last_test_at ? ` at ${new Date(connection.last_test_at).toLocaleString()}` : ""}
+              </p>
+              {connection.last_test_message && (
+                <p className="table-name">{connection.last_test_message}</p>
+              )}
+            </div>
+            <div className="item-actions">
+              <button type="button" onClick={() => editConnection(connection)}>Edit</button>
+              <button type="button" onClick={() => testConnection(connection.id)}>Test</button>
+              <button type="button" onClick={() => deactivateConnection(connection.id)} disabled={connection.status === "inactive"}>Deactivate</button>
             </div>
           </article>
         ))}

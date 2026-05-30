@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     jwt_secret_key: str = "change_me"
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 1440
+    connection_secret_key: str = "change_me_connection_secret_key"
 
     model_config = SettingsConfigDict(
         env_file=".env",

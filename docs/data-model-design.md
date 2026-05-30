@@ -1,6 +1,6 @@
 # Data Model Design
 
-Data models describe business objects in the Manufacturing Data Platform. This milestone stores metadata and creates generated PostgreSQL storage tables for Type A models. It does not expose dynamic inbound or outbound APIs.
+Data models describe business objects in the Manufacturing Data Platform. The current foundation stores metadata, creates generated PostgreSQL storage tables for Type A models, and exposes dynamic inbound/outbound REST APIs for Type A models.
 
 ## Model Types
 
@@ -89,7 +89,7 @@ Current limitations:
 
 - Updating a data model does not alter the generated table. Schema evolution will be handled in a later milestone.
 - Deactivating a data model does not drop the generated table. Archival and drop policy will be handled later.
-- Inbound and outbound dynamic APIs are not implemented yet.
+- Updating a data model does not alter inbound/outbound behavior beyond metadata returned by the APIs.
 
 ## AI-Ready Metadata
 
