@@ -24,6 +24,8 @@ Inbound and outbound APIs accept either a valid user JWT or a scoped API key. AP
 
 The Connection Manager stores external system connection metadata for PostgreSQL, Oracle, SQL Server, REST API, and MQTT endpoints. Passwords are encrypted before storage and are never returned by API responses. These records are intended for later sync jobs, mapping, migration, and Type B linked model features.
 
+The `mdp_staging` PostgreSQL schema contains mock JDE procurement staging tables for MVP demos. These tables represent data already migrated by an external ETL tool and will later support Type B linked data models.
+
 ### Database
 
 PostgreSQL 16 is the primary application database. It uses the default MVP database settings:
@@ -59,6 +61,7 @@ Implemented:
 - Transaction logging and transaction read APIs
 - API key management and scoped API key authentication
 - Connection metadata CRUD and basic connection testing
+- Mock JDE procurement staging tables and seed data
 - SQLAlchemy database connection setup
 - Alembic migration setup
 - React/Vite dashboard shell

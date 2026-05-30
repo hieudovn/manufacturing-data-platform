@@ -289,3 +289,28 @@ Testing behavior:
 - Oracle returns a clear unavailable-driver message when `python-oracledb` is missing or not configured.
 - SQL Server returns a clear unavailable-driver message when `pyodbc` or an ODBC driver is missing.
 - MQTT validates metadata only in this milestone.
+
+## Demo Procurement Staging
+
+Demo staging endpoints require JWT authentication:
+
+- `POST /admin/demo/seed-procurement-staging`
+- `GET /admin/demo/procurement-staging-summary`
+
+`POST /admin/demo/seed-procurement-staging` safely creates and reseeds mock JDE procurement staging tables. The operation is idempotent and returns deterministic row counts:
+
+```json
+{
+  "status": "success",
+  "message": "Procurement staging data seeded successfully",
+  "tables": {
+    "stg_jde_supplier": 5,
+    "stg_jde_po_header": 5,
+    "stg_jde_po_line": 5,
+    "stg_jde_po_receipt": 3,
+    "stg_jde_ap_invoice": 5
+  }
+}
+```
+
+These endpoints do not implement Oracle sync, Type B query mapping, or table browsing.

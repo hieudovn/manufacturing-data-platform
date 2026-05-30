@@ -382,6 +382,44 @@ Current limitations:
 - MQTT testing currently validates metadata only.
 - No table browsing, migration, sync jobs, or Type B query mapping are implemented yet.
 
+## Mock JDE Procurement Staging Data
+
+The MVP includes mock PostgreSQL staging tables in the `mdp_staging` schema. These tables simulate procurement data from Oracle JDE that has already been migrated by an external ETL or database migration tool.
+
+The real Oracle JDE connector, sync jobs, table browsing, and Type B outbound mapping are deferred to later milestones.
+
+Simulated JDE tables:
+
+- `F0101` / `F0401`: `mdp_staging.stg_jde_supplier`
+- `F4301`: `mdp_staging.stg_jde_po_header`
+- `F4311`: `mdp_staging.stg_jde_po_line`
+- `F43121`: `mdp_staging.stg_jde_po_receipt`
+- `F0411`: `mdp_staging.stg_jde_ap_invoice`
+
+Reseed demo data from the API:
+
+```bash
+curl -X POST http://localhost:8000/admin/demo/seed-procurement-staging \
+  -H "Authorization: Bearer <token>"
+```
+
+Check row counts:
+
+```bash
+curl http://localhost:8000/admin/demo/procurement-staging-summary \
+  -H "Authorization: Bearer <token>"
+```
+
+SQL examples:
+
+```sql
+SELECT * FROM mdp_staging.stg_jde_supplier;
+SELECT * FROM mdp_staging.stg_jde_po_header;
+SELECT * FROM mdp_staging.stg_jde_po_line;
+SELECT * FROM mdp_staging.stg_jde_po_receipt;
+SELECT * FROM mdp_staging.stg_jde_ap_invoice;
+```
+
 ## Testing Auth In Swagger UI
 
 1. Open http://localhost:8000/docs.

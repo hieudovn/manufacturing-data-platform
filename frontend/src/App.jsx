@@ -105,6 +105,8 @@ function App() {
   const [connectionForm, setConnectionForm] = useState(emptyConnection);
   const [editingConnectionId, setEditingConnectionId] = useState(null);
   const [connectionMessage, setConnectionMessage] = useState("");
+  const [demoCounts, setDemoCounts] = useState(null);
+  const [demoMessage, setDemoMessage] = useState("");
   const [form, setForm] = useState(emptyDataModel);
   const [editingId, setEditingId] = useState(null);
   const [modelMessage, setModelMessage] = useState("");
@@ -184,6 +186,9 @@ function App() {
     }
     if (token && page === "connections") {
       loadConnections();
+    }
+    if (token && page === "demo-data") {
+      loadDemoSummary();
     }
   }, [page, token]);
 
@@ -506,6 +511,41 @@ function App() {
     }
   }
 
+  async function loadDemoSummary() {
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/demo/procurement-staging-summary`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        throw new Error("Unable to load demo data summary");
+      }
+      const data = await response.json();
+      setDemoCounts(data.tables);
+      setDemoMessage("");
+    } catch (err) {
+      setDemoCounts(null);
+      setDemoMessage(err instanceof Error ? err.message : "Unable to load demo data summary");
+    }
+  }
+
+  async function seedDemoData() {
+    setDemoMessage("");
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/demo/seed-procurement-staging`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        throw new Error("Unable to seed procurement staging data");
+      }
+      const data = await response.json();
+      setDemoCounts(data.tables);
+      setDemoMessage(data.message);
+    } catch (err) {
+      setDemoMessage(err instanceof Error ? err.message : "Unable to seed procurement staging data");
+    }
+  }
+
   function resetForm() {
     setForm({ ...emptyDataModel, attributes: [{ ...emptyAttribute }] });
     setEditingId(null);
@@ -647,7 +687,9 @@ function App() {
                     ? "API Keys"
                     : page === "connections"
                       ? "Connections"
-                      : "Transactions"}
+                      : page === "demo-data"
+                        ? "Demo Data"
+                        : "Transactions"}
           </h1>
           <p className="summary">
             Authenticated workspace for configurable manufacturing data services.
@@ -668,6 +710,9 @@ function App() {
           </button>
           <button type="button" onClick={() => setPage("connections")}>
             Connections
+          </button>
+          <button type="button" onClick={() => setPage("demo-data")}>
+            Demo Data
           </button>
           <button type="button" onClick={() => setPage("transactions")}>
             Transactions
@@ -733,6 +778,13 @@ function App() {
           editConnection={editConnection}
           deactivateConnection={deactivateConnection}
           testConnection={testConnection}
+        />
+      ) : page === "demo-data" ? (
+        <DemoDataPage
+          counts={demoCounts}
+          message={demoMessage}
+          seedDemoData={seedDemoData}
+          loadDemoSummary={loadDemoSummary}
         />
       ) : (
         <TransactionsPage
@@ -1353,6 +1405,49 @@ function ConnectionsPage({
               <button type="button" onClick={() => editConnection(connection)}>Edit</button>
               <button type="button" onClick={() => testConnection(connection.id)}>Test</button>
               <button type="button" onClick={() => deactivateConnection(connection.id)} disabled={connection.status === "inactive"}>Deactivate</button>
+            </div>
+          </article>
+        ))}
+      </section>
+    </section>
+  );
+}
+
+function DemoDataPage({ counts, message, seedDemoData, loadDemoSummary }) {
+  const tableLabels = {
+    stg_jde_supplier: "Supplier Master",
+    stg_jde_po_header: "PO Header",
+    stg_jde_po_line: "PO Line",
+    stg_jde_po_receipt: "PO Receipt",
+    stg_jde_ap_invoice: "AP Invoice",
+  };
+
+  return (
+    <section className="demo-data-panel">
+      <div className="model-form">
+        <div className="section-heading">
+          <div>
+            <p className="panel-label">JDE Procurement Demo</p>
+            <h2>Mock staging data</h2>
+          </div>
+          <div className="item-actions">
+            <button type="button" onClick={loadDemoSummary}>Refresh Counts</button>
+            <button type="button" onClick={seedDemoData}>Seed Procurement Staging Data</button>
+          </div>
+        </div>
+        <p className="helper-text">
+          The mdp_staging tables simulate JDE procurement data already migrated into PostgreSQL by an external ETL tool.
+        </p>
+        {message && <p className="form-message">{message}</p>}
+      </div>
+
+      <section className="model-list">
+        {Object.entries(tableLabels).map(([tableName, label]) => (
+          <article className="model-item" key={tableName}>
+            <div>
+              <p className="panel-label">{tableName}</p>
+              <h2>{counts?.[tableName] ?? "-"}</h2>
+              <p>{label}</p>
             </div>
           </article>
         ))}
