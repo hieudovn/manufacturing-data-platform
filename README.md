@@ -99,6 +99,16 @@ Recommended demo flow:
 
 The UI uses selectors for system-backed choices such as model type, schemas, tables/views, columns, data types, API key scope, directions, transaction filters, and connection types so demo users do not need to type internal identifiers manually.
 
+Users page capabilities:
+
+- Create users with username, email, full name, role, password, and active status.
+- View and edit user profile fields.
+- Activate or deactivate users without deleting the row.
+- Reset user passwords from the Admin UI.
+- Filter users by search text, role, and status.
+
+Current roles are basic labels: `admin`, `data_engineer`, `api_manager`, and `viewer`. Fine-grained RBAC will be added later.
+
 ## Backend
 
 Health check:

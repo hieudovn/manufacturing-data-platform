@@ -107,6 +107,12 @@ const ownerDepartmentOptions = [
 ];
 const sensitivityOptions = ["public", "internal", "confidential", "restricted"];
 const apiKeySourceSystems = ["", "External Test Client", "ESB", "BI", "AI Agent", "QMS", "MES", "ERP", "Other"];
+const roleOptions = [
+  ["admin", "Admin"],
+  ["data_engineer", "Data Engineer"],
+  ["api_manager", "API Manager"],
+  ["viewer", "Viewer"],
+];
 const reservedQueryParams = new Set(["limit", "offset", "include_meta", "include_raw"]);
 const reservedSourceAttributeNames = {
   id: "source_id",
@@ -290,6 +296,16 @@ function ActionIcon({ name }) {
         <path d="M8 5v14" />
         <path d="m16 15 3 3" />
         <circle cx="14" cy="13" r="3" />
+      </svg>
+    );
+  }
+  if (name === "key") {
+    return (
+      <svg {...commonProps}>
+        <circle cx="7.5" cy="14.5" r="3.5" />
+        <path d="M10 12 21 3" />
+        <path d="m16 8 2 2" />
+        <path d="m19 5 2 2" />
       </svg>
     );
   }
@@ -1497,7 +1513,14 @@ function App() {
             onRefresh={refreshDbBrowser}
           />
         ) : page === "users" ? (
-          <UsersPage users={users} message={usersMessage} loadUsers={loadUsers} />
+          <UsersPage
+            users={users}
+            currentUser={currentUser}
+            authHeaders={authHeaders}
+            message={usersMessage}
+            setMessage={setUsersMessage}
+            loadUsers={loadUsers}
+          />
         ) : (
           <TransactionsPage
             transactions={transactions}
@@ -3476,50 +3499,486 @@ function DbBrowserPage({
   );
 }
 
-function UsersPage({ users, message, loadUsers }) {
+const emptyUserForm = {
+  username: "",
+  email: "",
+  full_name: "",
+  role: "viewer",
+  password: "",
+  is_active: true,
+};
+
+function roleLabel(role) {
+  return roleOptions.find(([value]) => value === role)?.[1] || role || "-";
+}
+
+function UsersPage({ users, currentUser, authHeaders, message, setMessage, loadUsers }) {
+  const [drawerMode, setDrawerMode] = useState(null);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [form, setForm] = useState(emptyUserForm);
+  const [passwordForm, setPasswordForm] = useState({ new_password: "", confirm_password: "" });
+  const [errors, setErrors] = useState({});
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("active");
+
+  const filteredUsers = users.filter((user) => {
+    const query = search.trim().toLowerCase();
+    const matchesSearch =
+      !query ||
+      [user.username, user.email, user.full_name]
+        .filter(Boolean)
+        .some((value) => value.toLowerCase().includes(query));
+    const matchesRole = roleFilter === "all" || user.role === roleFilter;
+    const matchesStatus =
+      statusFilter === "all" ||
+      (statusFilter === "active" ? user.is_active : !user.is_active);
+    return matchesSearch && matchesRole && matchesStatus;
+  });
+
+  function closeDrawer() {
+    setDrawerMode(null);
+    setSelectedUser(null);
+    setForm(emptyUserForm);
+    setPasswordForm({ new_password: "", confirm_password: "" });
+    setErrors({});
+  }
+
+  function openCreateUser() {
+    setMessage("");
+    setSelectedUser(null);
+    setForm(emptyUserForm);
+    setErrors({});
+    setDrawerMode("create");
+  }
+
+  function openViewUser(user) {
+    setMessage("");
+    setSelectedUser(user);
+    setDrawerMode("view");
+  }
+
+  function openEditUser(user) {
+    setMessage("");
+    setSelectedUser(user);
+    setForm({
+      username: user.username,
+      email: user.email,
+      full_name: user.full_name || "",
+      role: user.role || "viewer",
+      password: "",
+      is_active: user.is_active,
+    });
+    setErrors({});
+    setDrawerMode("edit");
+  }
+
+  function openResetPassword(user) {
+    setMessage("");
+    setSelectedUser(user);
+    setPasswordForm({ new_password: "", confirm_password: "" });
+    setErrors({});
+    setDrawerMode("reset-password");
+  }
+
+  function validateUserForm(isCreate) {
+    const nextErrors = {};
+    if (isCreate && !form.username.trim()) {
+      nextErrors.username = "Username is required.";
+    }
+    if (!form.email.trim() || !form.email.includes("@")) {
+      nextErrors.email = "A valid email is required.";
+    }
+    if (!form.role) {
+      nextErrors.role = "Role is required.";
+    }
+    if (isCreate && !form.password.trim()) {
+      nextErrors.password = "Password is required.";
+    }
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  }
+
+  async function saveUser(event) {
+    event.preventDefault();
+    const isCreate = drawerMode === "create";
+    if (!validateUserForm(isCreate)) {
+      return;
+    }
+    const payload = isCreate
+      ? {
+          username: form.username.trim(),
+          email: form.email.trim(),
+          full_name: form.full_name.trim() || null,
+          role: form.role,
+          password: form.password,
+          is_active: form.is_active,
+        }
+      : {
+          email: form.email.trim(),
+          full_name: form.full_name.trim() || null,
+          role: form.role,
+          is_active: form.is_active,
+        };
+    try {
+      const response = await fetch(
+        isCreate ? `${API_BASE_URL}/users` : `${API_BASE_URL}/users/${selectedUser.id}`,
+        {
+          method: isCreate ? "POST" : "PUT",
+          headers: authHeaders,
+          body: JSON.stringify(payload),
+        },
+      );
+      const detail = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(formatApiDetail(detail?.detail));
+      }
+      await loadUsers();
+      closeDrawer();
+      setMessage(isCreate ? "User created." : "User updated.");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Unable to save user");
+    }
+  }
+
+  async function setUserActive(user, isActive) {
+    if (!isActive && user.id === currentUser?.id) {
+      setMessage("You cannot deactivate your own account.");
+      return;
+    }
+    if (!isActive && !window.confirm("Deactivate this user? They will no longer be able to log in.")) {
+      return;
+    }
+    try {
+      const response = await fetch(`${API_BASE_URL}/users/${user.id}`, {
+        method: "PUT",
+        headers: authHeaders,
+        body: JSON.stringify({ is_active: isActive }),
+      });
+      const detail = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(formatApiDetail(detail?.detail));
+      }
+      await loadUsers();
+      setMessage(isActive ? "User activated." : "User deactivated.");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Unable to update user status");
+    }
+  }
+
+  async function resetPassword(event) {
+    event.preventDefault();
+    const nextErrors = {};
+    if (!passwordForm.new_password || passwordForm.new_password.length < 6) {
+      nextErrors.new_password = "Password must be at least 6 characters.";
+    }
+    if (passwordForm.new_password !== passwordForm.confirm_password) {
+      nextErrors.confirm_password = "Passwords do not match.";
+    }
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) {
+      return;
+    }
+    try {
+      const response = await fetch(`${API_BASE_URL}/users/${selectedUser.id}`, {
+        method: "PUT",
+        headers: authHeaders,
+        body: JSON.stringify({ password: passwordForm.new_password }),
+      });
+      const detail = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(formatApiDetail(detail?.detail));
+      }
+      closeDrawer();
+      setMessage("Password reset.");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Unable to reset password");
+    }
+  }
+
   return (
     <section className="browser-panel">
-      <div className="model-form">
-        <div className="section-heading">
-          <div>
-            <p className="panel-label">Access</p>
-            <h2>User management</h2>
-          </div>
-          <button type="button" onClick={loadUsers}>Refresh</button>
-        </div>
+      <SectionCard
+        title="User Management"
+        eyebrow="Access"
+        actions={
+          <>
+            <button type="button" onClick={loadUsers}>Refresh</button>
+            <button className="primary-button" type="button" onClick={openCreateUser}>New User</button>
+          </>
+        }
+      >
         <p className="helper-text">
-          Human users authenticate with JWT. Fine-grained role permissions will be expanded in a later milestone.
+          Human users authenticate with JWT. Roles are basic labels for now; fine-grained RBAC will be added later.
         </p>
         {message && <p className="form-message">{message}</p>}
-      </div>
+      </SectionCard>
 
-      <div className="browser-results">
-        <table>
-          <thead>
-            <tr>
-              <th>Username</th>
-              <th>Email</th>
-              <th>Full Name</th>
-              <th>Role</th>
-              <th>Active</th>
-              <th>Created</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((user) => (
-              <tr key={user.id}>
-                <td>{user.username}</td>
-                <td>{user.email}</td>
-                <td>{user.full_name || "-"}</td>
-                <td>{user.role}</td>
-                <td>{String(user.is_active)}</td>
-                <td>{new Date(user.created_at).toLocaleString()}</td>
+      <section className="model-list table-panel">
+        <div className="section-heading">
+          <div>
+            <p className="panel-label">Directory</p>
+            <h2>{filteredUsers.length} users</h2>
+          </div>
+        </div>
+        <div className="filter-bar">
+          <label>
+            Search
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="username, email, name" />
+          </label>
+          <label>
+            Role
+            <select value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)}>
+              <option value="all">All roles</option>
+              {roleOptions.map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Status
+            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+              <option value="all">All</option>
+            </select>
+          </label>
+        </div>
+
+        <div className="browser-results">
+          <table>
+            <thead>
+              <tr>
+                <th>Full Name</th>
+                <th>Username</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th>Created At</th>
+                <th>Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {filteredUsers.map((user) => (
+                <tr key={user.id}>
+                  <td>{user.full_name || "-"}</td>
+                  <td>{user.username}</td>
+                  <td>{user.email}</td>
+                  <td><Badge tone="neutral">{roleLabel(user.role)}</Badge></td>
+                  <td><Badge tone={user.is_active ? "success" : "danger"}>{user.is_active ? "Active" : "Inactive"}</Badge></td>
+                  <td>{new Date(user.created_at).toLocaleString()}</td>
+                  <td>
+                    <div className="row-actions">
+                      <IconActionButton label="View" icon="eye" onClick={() => openViewUser(user)} />
+                      <IconActionButton label="Edit" icon="edit" onClick={() => openEditUser(user)} />
+                      {user.is_active ? (
+                        <IconActionButton
+                          label={user.id === currentUser?.id ? "Cannot deactivate own account" : "Deactivate"}
+                          icon="deactivate"
+                          onClick={() => setUserActive(user, false)}
+                          disabled={user.id === currentUser?.id}
+                          tone="danger"
+                        />
+                      ) : (
+                        <IconActionButton label="Activate" icon="deactivate" onClick={() => setUserActive(user, true)} />
+                      )}
+                      <IconActionButton label="Reset Password" icon="key" onClick={() => openResetPassword(user)} />
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {filteredUsers.length === 0 && <EmptyState message="No users match the current filters." />}
+        </div>
+      </section>
+
+      {drawerMode && (
+        <UserDrawer
+          mode={drawerMode}
+          user={selectedUser}
+          form={form}
+          setForm={setForm}
+          passwordForm={passwordForm}
+          setPasswordForm={setPasswordForm}
+          errors={errors}
+          closeDrawer={closeDrawer}
+          openEditUser={openEditUser}
+          saveUser={saveUser}
+          resetPassword={resetPassword}
+        />
+      )}
     </section>
+  );
+}
+
+function FieldError({ message }) {
+  return message ? <span className="field-error">{message}</span> : null;
+}
+
+function UserDrawer({
+  mode,
+  user,
+  form,
+  setForm,
+  passwordForm,
+  setPasswordForm,
+  errors,
+  closeDrawer,
+  openEditUser,
+  saveUser,
+  resetPassword,
+}) {
+  const isView = mode === "view";
+  const isReset = mode === "reset-password";
+  const title =
+    mode === "create"
+      ? "Create User"
+      : mode === "edit"
+        ? "Edit User"
+        : isReset
+          ? "Reset Password"
+          : "View User";
+
+  return (
+    <div className="drawer-backdrop" role="dialog" aria-modal="true" aria-labelledby="user-drawer-title">
+      <section className="drawer-panel drawer-panel--compact">
+        <header className="drawer-header">
+          <div>
+            <p className="panel-label">Users</p>
+            <h2 id="user-drawer-title">{title}</h2>
+          </div>
+          <button className="icon-button" type="button" onClick={closeDrawer} aria-label="Close user dialog">X</button>
+        </header>
+
+        {isView && user && (
+          <>
+            <div className="drawer-body">
+              <SectionCard title={user.full_name || user.username} eyebrow="User Details">
+                <div className="detail-grid">
+                  <div><span>Username</span><strong>{user.username}</strong></div>
+                  <div><span>Email</span><strong>{user.email}</strong></div>
+                  <div><span>Full Name</span><strong>{user.full_name || "-"}</strong></div>
+                  <div><span>Role</span><strong><Badge tone="neutral">{roleLabel(user.role)}</Badge></strong></div>
+                  <div><span>Status</span><strong><Badge tone={user.is_active ? "success" : "danger"}>{user.is_active ? "Active" : "Inactive"}</Badge></strong></div>
+                  <div><span>Created</span><strong>{new Date(user.created_at).toLocaleString()}</strong></div>
+                  <div><span>Updated</span><strong>{user.updated_at ? new Date(user.updated_at).toLocaleString() : "-"}</strong></div>
+                </div>
+              </SectionCard>
+            </div>
+            <footer className="drawer-footer">
+              <button type="button" onClick={closeDrawer}>Close</button>
+              <button className="primary-button" type="button" onClick={() => openEditUser(user)}>Edit User</button>
+            </footer>
+          </>
+        )}
+
+        {(mode === "create" || mode === "edit") && (
+          <form className="drawer-form" onSubmit={saveUser}>
+            <div className="drawer-body">
+              <SectionCard title="Account Information" eyebrow={mode === "create" ? "New User" : "Edit User"}>
+                <div className="form-grid">
+                  <label>
+                    Username
+                    <input
+                      value={form.username}
+                      onChange={(event) => setForm({ ...form, username: event.target.value })}
+                      readOnly={mode === "edit"}
+                      required
+                    />
+                    <FieldError message={errors.username} />
+                  </label>
+                  <label>
+                    Email
+                    <input
+                      type="email"
+                      value={form.email}
+                      onChange={(event) => setForm({ ...form, email: event.target.value })}
+                      required
+                    />
+                    <FieldError message={errors.email} />
+                  </label>
+                  <label>
+                    Full Name
+                    <input value={form.full_name} onChange={(event) => setForm({ ...form, full_name: event.target.value })} />
+                  </label>
+                  <label>
+                    Role
+                    <select value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value })}>
+                      {roleOptions.map(([value, label]) => (
+                        <option key={value} value={value}>{label}</option>
+                      ))}
+                    </select>
+                    <FieldError message={errors.role} />
+                  </label>
+                  {mode === "create" && (
+                    <label>
+                      Password
+                      <input
+                        type="password"
+                        value={form.password}
+                        onChange={(event) => setForm({ ...form, password: event.target.value })}
+                        required
+                      />
+                      <FieldError message={errors.password} />
+                    </label>
+                  )}
+                  <label>
+                    Status
+                    <select value={form.is_active ? "active" : "inactive"} onChange={(event) => setForm({ ...form, is_active: event.target.value === "active" })}>
+                      <option value="active">Active</option>
+                      <option value="inactive">Inactive</option>
+                    </select>
+                  </label>
+                </div>
+              </SectionCard>
+            </div>
+            <footer className="drawer-footer">
+              <button type="button" onClick={closeDrawer}>Cancel</button>
+              <button className="primary-button" type="submit">{mode === "create" ? "Create User" : "Save Changes"}</button>
+            </footer>
+          </form>
+        )}
+
+        {isReset && user && (
+          <form className="drawer-form" onSubmit={resetPassword}>
+            <div className="drawer-body">
+              <SectionCard title="Reset Password" eyebrow="Credential Update">
+                <p className="helper-text">
+                  Reset password for {user.username} ({user.email}).
+                </p>
+                <div className="form-grid">
+                  <label>
+                    New Password
+                    <input
+                      type="password"
+                      value={passwordForm.new_password}
+                      onChange={(event) => setPasswordForm({ ...passwordForm, new_password: event.target.value })}
+                      required
+                    />
+                    <FieldError message={errors.new_password} />
+                  </label>
+                  <label>
+                    Confirm Password
+                    <input
+                      type="password"
+                      value={passwordForm.confirm_password}
+                      onChange={(event) => setPasswordForm({ ...passwordForm, confirm_password: event.target.value })}
+                      required
+                    />
+                    <FieldError message={errors.confirm_password} />
+                  </label>
+                </div>
+              </SectionCard>
+            </div>
+            <footer className="drawer-footer">
+              <button type="button" onClick={closeDrawer}>Cancel</button>
+              <button className="primary-button" type="submit">Reset Password</button>
+            </footer>
+          </form>
+        )}
+      </section>
+    </div>
   );
 }
 

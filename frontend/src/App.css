@@ -1069,6 +1069,10 @@ h3 {
   box-shadow: -24px 0 70px rgba(0, 0, 0, 0.22);
 }
 
+.drawer-panel--compact {
+  width: min(720px, 90vw);
+}
+
 .drawer-header,
 .drawer-footer {
   position: sticky;
@@ -1158,6 +1162,12 @@ h3 {
 .endpoint-grid {
   display: grid;
   gap: 8px;
+}
+
+.field-error {
+  color: #b91c1c;
+  font-size: 0.78rem;
+  font-weight: 700;
 }
 
 @media (max-width: 1180px) {
