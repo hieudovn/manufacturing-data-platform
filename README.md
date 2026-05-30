@@ -13,6 +13,8 @@ The frontend supports login, a consolidated Admin UI, data model management, Typ
 
 Authentication is implemented with bcrypt password hashing and JWT bearer tokens. A default admin user is seeded on backend startup when no users exist.
 
+For a concise project context snapshot covering product vision, architecture, completed capabilities, design decisions, and roadmap, see [docs/project-context.md](docs/project-context.md).
+
 ## Local Setup
 
 Prerequisites:
