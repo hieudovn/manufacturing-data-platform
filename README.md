@@ -200,7 +200,22 @@ curl "http://localhost:8000/data-models/<id>/mapped-preview?limit=20" \
   -H "Authorization: Bearer <token>"
 ```
 
-Type B outbound APIs, Type B mapping UI, Oracle connector, and sync jobs are still deferred.
+Type B Mapping UI flow:
+
+1. Open `Data Models`.
+2. Choose `Type B: Linked Model`.
+3. Select `mdp_staging` and a staging table or view.
+4. Click `Generate Attributes from Source Columns`.
+5. Pick one primary key attribute.
+6. Validate the mapping, preview rows, then save.
+
+To create `supplier`, select `mdp_staging.stg_jde_supplier`, generate attributes, keep the supplier fields you need, and mark `supplier_code` as the primary key.
+
+To create `purchase_order_summary`, select `mdp_staging.vw_jde_purchase_order_summary`, generate attributes, keep the purchase order summary fields, and mark `po_no` as the primary key. View nullability warnings are expected and do not block saving.
+
+In the UI, Type A models are ingested models that create generated PostgreSQL tables. Type B models are linked models that expose existing staging tables or views without creating new tables.
+
+Type B outbound APIs, Oracle connector, and sync jobs are still deferred.
 
 ## Dynamic Inbound API
 

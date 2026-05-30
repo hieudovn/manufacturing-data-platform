@@ -374,6 +374,11 @@ h2 {
   gap: 14px;
 }
 
+.type-b-designer {
+  display: grid;
+  gap: 18px;
+}
+
 .attribute-row {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(120px, 0.7fr);
@@ -382,6 +387,49 @@ h2 {
   border: 1px solid #d6e0e7;
   border-radius: 8px;
   background: #f8fbfd;
+}
+
+.mapping-table {
+  display: grid;
+  gap: 8px;
+  overflow-x: auto;
+}
+
+.mapping-row {
+  display: grid;
+  grid-template-columns:
+    minmax(120px, 0.85fr)
+    minmax(120px, 0.85fr)
+    minmax(92px, 0.55fr)
+    minmax(150px, 1fr)
+    minmax(92px, 0.55fr)
+    minmax(150px, 1fr)
+    auto;
+  gap: 8px;
+  align-items: start;
+  padding: 10px;
+  border: 1px solid #d6e0e7;
+  border-radius: 8px;
+  background: #f8fbfd;
+  min-width: 980px;
+}
+
+.mapping-row--header {
+  color: #596975;
+  background: transparent;
+  border: 0;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.mapping-row textarea {
+  min-height: 42px;
+}
+
+.mapping-flags {
+  display: grid;
+  gap: 6px;
 }
 
 .attribute-row textarea {
@@ -408,6 +456,36 @@ h2 {
   font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
   font-size: 0.9rem;
   overflow-wrap: anywhere;
+}
+
+.warning-text {
+  margin: 0;
+  color: #8a5b00;
+  font-weight: 800;
+}
+
+.message-list {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid #d6e0e7;
+  border-radius: 8px;
+  background: #f8fbfd;
+}
+
+.message-list p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.message-list--warning {
+  border-color: #d8bd64;
+  background: #fff8df;
+}
+
+.message-list--error {
+  border-color: #d99086;
+  background: #fff0ee;
 }
 
 .model-item {
@@ -566,6 +644,7 @@ h2 {
   .db-browser-grid,
   .form-grid,
   .attribute-row,
+  .mapping-row,
   .browser-controls,
   .table-header,
   .transaction-row > button {

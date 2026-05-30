@@ -10,6 +10,9 @@ const emptyAttribute = {
   data_type: "text",
   required: false,
   description: "",
+  source_schema: "",
+  source_table: "",
+  source_column: "",
   is_primary_key: false,
 };
 
@@ -27,6 +30,76 @@ const emptyDataModel = {
   ai_enabled: true,
   attributes: [{ ...emptyAttribute }],
 };
+
+const dataTypeOptions = ["text", "integer", "float", "boolean", "date", "datetime", "json"];
+const reservedSourceAttributeNames = {
+  id: "source_id",
+  raw_payload: "source_raw_payload",
+  created_at: "source_created_at",
+  updated_at: "source_updated_at",
+};
+
+function attributeNameFromSourceColumn(columnName = "") {
+  return reservedSourceAttributeNames[columnName] || columnName;
+}
+
+function displayNameFromAttributeName(attributeName = "") {
+  return attributeName
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function inferPlatformType(sourceType = "") {
+  const normalized = sourceType.toLowerCase();
+  if (
+    normalized.startsWith("character varying") ||
+    normalized.startsWith("varchar") ||
+    normalized.startsWith("char") ||
+    normalized === "text"
+  ) {
+    return "text";
+  }
+  if (["integer", "bigint", "smallint"].some((typeName) => normalized.startsWith(typeName))) {
+    return "integer";
+  }
+  if (
+    ["numeric", "double precision", "real", "decimal"].some((typeName) =>
+      normalized.startsWith(typeName),
+    )
+  ) {
+    return "float";
+  }
+  if (normalized.startsWith("boolean")) {
+    return "boolean";
+  }
+  if (normalized === "date") {
+    return "date";
+  }
+  if (normalized.startsWith("timestamp")) {
+    return "datetime";
+  }
+  if (normalized === "json" || normalized === "jsonb") {
+    return "json";
+  }
+  return "text";
+}
+
+function formatApiDetail(detail) {
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => `${item.field || item.loc?.join(".") || "error"}: ${item.message || item.msg || JSON.stringify(item)}`)
+      .join("\n");
+  }
+  if (typeof detail === "string") {
+    return detail;
+  }
+  if (detail) {
+    return JSON.stringify(detail);
+  }
+  return "Request failed";
+}
 
 const emptyConnection = {
   name: "",
@@ -50,6 +123,9 @@ function compactPayload(form) {
     data_type: attribute.data_type,
     required: attribute.required,
     description: attribute.description || null,
+    source_schema: form.type === "B" ? attribute.source_schema || null : null,
+    source_table: form.type === "B" ? attribute.source_table || null : null,
+    source_column: form.type === "B" ? attribute.source_column || null : null,
     is_primary_key: attribute.is_primary_key,
   }));
   const primaryAttribute = attributes.find((attribute) => attribute.is_primary_key);
@@ -666,25 +742,53 @@ function App() {
     setModelMessage("");
   }
 
-  function editModel(model) {
-    setEditingId(model.id);
-    setForm({
-      ...emptyDataModel,
-      ...model,
-      attributes: model.attributes.map((attribute) => ({
-        ...emptyAttribute,
-        ...attribute,
-      })),
-    });
+  async function editModel(model) {
     setModelMessage("");
+    try {
+      const response = await fetch(`${API_BASE_URL}/data-models/${model.id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        throw new Error("Unable to load data model");
+      }
+      const detail = await response.json();
+      setEditingId(detail.id);
+      setForm({
+        ...emptyDataModel,
+        ...detail,
+        attributes: detail.attributes.map((attribute) => ({
+          ...emptyAttribute,
+          ...attribute,
+        })),
+      });
+    } catch (err) {
+      setModelMessage(err instanceof Error ? err.message : "Unable to load data model");
+    }
   }
 
   function updateAttribute(index, field, value) {
     setForm((current) => ({
       ...current,
       attributes: current.attributes.map((attribute, attributeIndex) =>
-        attributeIndex === index ? { ...attribute, [field]: value } : attribute,
+        field === "is_primary_key"
+          ? {
+              ...attribute,
+              is_primary_key: attributeIndex === index ? value : false,
+            }
+          : attributeIndex === index
+            ? { ...attribute, [field]: value }
+            : attribute,
       ),
+      primary_key:
+        field === "is_primary_key"
+          ? value
+            ? current.attributes[index]?.name || ""
+            : current.primary_key === current.attributes[index]?.name
+              ? ""
+              : current.primary_key
+          : field === "name" && current.attributes[index]?.is_primary_key
+            ? value
+            : current.primary_key,
     }));
   }
 
@@ -712,21 +816,39 @@ function App() {
     const url = editingId
       ? `${API_BASE_URL}/data-models/${editingId}`
       : `${API_BASE_URL}/data-models`;
+    const payload = compactPayload(form);
 
     try {
+      let validationWarnings = [];
+      if (form.type === "B") {
+        const validationResponse = await fetch(`${API_BASE_URL}/data-models/type-b/validate-mapping`, {
+          method: "POST",
+          headers: authHeaders,
+          body: JSON.stringify(payload),
+        });
+        const validationDetail = await validationResponse.json().catch(() => null);
+        if (!validationResponse.ok) {
+          throw new Error(formatApiDetail(validationDetail?.detail));
+        }
+        validationWarnings = validationDetail?.warnings || [];
+      }
+
       const response = await fetch(url, {
         method,
         headers: authHeaders,
-        body: JSON.stringify(compactPayload(form)),
+        body: JSON.stringify(payload),
       });
       if (!response.ok) {
         const detail = await response.json().catch(() => null);
-        throw new Error(detail?.detail ? JSON.stringify(detail.detail) : "Save failed");
+        throw new Error(formatApiDetail(detail?.detail));
       }
 
       resetForm();
       await loadDataModels();
-      setModelMessage(editingId ? "Data model updated." : "Data model created.");
+      const warningText = validationWarnings.length
+        ? ` Warnings: ${validationWarnings.map((warning) => warning.message).join(" ")}`
+        : "";
+      setModelMessage(`${editingId ? "Data model updated." : "Data model created."}${warningText}`);
     } catch (err) {
       setModelMessage(err instanceof Error ? err.message : "Save failed");
     }
@@ -850,6 +972,7 @@ function App() {
           form={form}
           setForm={setForm}
           editingId={editingId}
+          authHeaders={authHeaders}
           modelMessage={modelMessage}
           saveDataModel={saveDataModel}
           resetForm={resetForm}
@@ -964,6 +1087,7 @@ function DataModelsPage({
   form,
   setForm,
   editingId,
+  authHeaders,
   modelMessage,
   saveDataModel,
   resetForm,
@@ -1006,10 +1130,22 @@ function DataModelsPage({
             Type
             <select
               value={form.type}
-              onChange={(event) => setForm({ ...form, type: event.target.value })}
+              onChange={(event) => {
+                const type = event.target.value;
+                setForm({
+                  ...form,
+                  type,
+                  attributes: form.attributes.map((attribute) => ({
+                    ...attribute,
+                    source_schema: type === "B" ? attribute.source_schema || "" : "",
+                    source_table: type === "B" ? attribute.source_table || "" : "",
+                    source_column: type === "B" ? attribute.source_column || "" : "",
+                  })),
+                });
+              }}
             >
-              <option value="A">Type A</option>
-              <option value="B">Type B</option>
+              <option value="A">Type A: Ingested Model</option>
+              <option value="B">Type B: Linked Model</option>
             </select>
           </label>
           <label>
@@ -1048,6 +1184,43 @@ function DataModelsPage({
           />
         </label>
 
+        {form.type === "B" && (
+          <label>
+            Business Definition
+            <textarea
+              value={form.business_definition || ""}
+              onChange={(event) =>
+                setForm({ ...form, business_definition: event.target.value })
+              }
+            />
+          </label>
+        )}
+
+        <div className="form-grid">
+          <label>
+            Primary Key
+            <input
+              value={form.primary_key || ""}
+              onChange={(event) => setForm({ ...form, primary_key: event.target.value })}
+              placeholder={form.type === "B" ? "supplier_code" : "invoice_no"}
+            />
+          </label>
+          <label>
+            Sensitivity
+            <select
+              value={form.sensitivity_level || "internal"}
+              onChange={(event) =>
+                setForm({ ...form, sensitivity_level: event.target.value })
+              }
+            >
+              <option value="public">public</option>
+              <option value="internal">internal</option>
+              <option value="confidential">confidential</option>
+              <option value="restricted">restricted</option>
+            </select>
+          </label>
+        </div>
+
         <label className="toggle-row">
           <input
             type="checkbox"
@@ -1060,7 +1233,7 @@ function DataModelsPage({
         <p className="helper-text">
           {form.type === "A"
             ? "A PostgreSQL table will be generated automatically for Type A models."
-            : "Type B models link to existing/staging tables and do not generate new tables."}
+            : "Type B models do not create new tables. They expose existing staging tables or views as governed data models and APIs."}
         </p>
 
         {form.generated_table && (
@@ -1070,74 +1243,83 @@ function DataModelsPage({
           </label>
         )}
 
-        <div className="section-heading">
-          <p className="panel-label">Attributes</p>
-          <button type="button" onClick={addAttribute}>
-            Add Attribute
-          </button>
-        </div>
-
-        <div className="attribute-list">
-          {form.attributes.map((attribute, index) => (
-            <div className="attribute-row" key={index}>
-              <input
-                value={attribute.name}
-                onChange={(event) => updateAttribute(index, "name", event.target.value)}
-                placeholder="invoice_no"
-                required
-              />
-              <input
-                value={attribute.display_name || ""}
-                onChange={(event) =>
-                  updateAttribute(index, "display_name", event.target.value)
-                }
-                placeholder="Invoice Number"
-              />
-              <select
-                value={attribute.data_type}
-                onChange={(event) => updateAttribute(index, "data_type", event.target.value)}
-              >
-                <option value="text">text</option>
-                <option value="integer">integer</option>
-                <option value="float">float</option>
-                <option value="boolean">boolean</option>
-                <option value="date">date</option>
-                <option value="datetime">datetime</option>
-                <option value="json">json</option>
-              </select>
-              <label className="compact-check">
-                <input
-                  type="checkbox"
-                  checked={attribute.required}
-                  onChange={(event) =>
-                    updateAttribute(index, "required", event.target.checked)
-                  }
-                />
-                Required
-              </label>
-              <label className="compact-check">
-                <input
-                  type="checkbox"
-                  checked={attribute.is_primary_key}
-                  onChange={(event) =>
-                    updateAttribute(index, "is_primary_key", event.target.checked)
-                  }
-                />
-                PK
-              </label>
-              <textarea
-                value={attribute.description || ""}
-                onChange={(event) =>
-                  updateAttribute(index, "description", event.target.value)
-                }
-                placeholder="Description"
-              />
-              <button type="button" onClick={() => removeAttribute(index)}>
-                Remove
+        {form.type === "B" ? (
+          <TypeBMappingDesigner
+            form={form}
+            setForm={setForm}
+            editingId={editingId}
+            authHeaders={authHeaders}
+            updateAttribute={updateAttribute}
+            removeAttribute={removeAttribute}
+          />
+        ) : (
+          <>
+            <div className="section-heading">
+              <p className="panel-label">Attributes</p>
+              <button type="button" onClick={addAttribute}>
+                Add Attribute
               </button>
             </div>
-          ))}
-        </div>
+
+            <div className="attribute-list">
+              {form.attributes.map((attribute, index) => (
+                <div className="attribute-row" key={index}>
+                  <input
+                    value={attribute.name}
+                    onChange={(event) => updateAttribute(index, "name", event.target.value)}
+                    placeholder="invoice_no"
+                    required
+                  />
+                  <input
+                    value={attribute.display_name || ""}
+                    onChange={(event) =>
+                      updateAttribute(index, "display_name", event.target.value)
+                    }
+                    placeholder="Invoice Number"
+                  />
+                  <select
+                    value={attribute.data_type}
+                    onChange={(event) => updateAttribute(index, "data_type", event.target.value)}
+                  >
+                    {dataTypeOptions.map((option) => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </select>
+                  <label className="compact-check">
+                    <input
+                      type="checkbox"
+                      checked={attribute.required}
+                      onChange={(event) =>
+                        updateAttribute(index, "required", event.target.checked)
+                      }
+                    />
+                    Required
+                  </label>
+                  <label className="compact-check">
+                    <input
+                      type="checkbox"
+                      checked={attribute.is_primary_key}
+                      onChange={(event) =>
+                        updateAttribute(index, "is_primary_key", event.target.checked)
+                      }
+                    />
+                    PK
+                  </label>
+                  <textarea
+                    value={attribute.description || ""}
+                    onChange={(event) =>
+                      updateAttribute(index, "description", event.target.value)
+                    }
+                    placeholder="Description"
+                  />
+                  <button type="button" onClick={() => removeAttribute(index)}>
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
 
         <button className="primary-button" type="submit">
           {editingId ? "Update Data Model" : "Create Data Model"}
@@ -1153,17 +1335,26 @@ function DataModelsPage({
                 Type {model.type} · {model.status}
               </p>
               <h2>{model.display_name}</h2>
-              <p>{model.description || model.name}</p>
+              <p>{model.name}</p>
+              <p>{model.description || "No description"}</p>
               {model.generated_table && (
                 <p className="table-name">{model.generated_table}</p>
+              )}
+              {model.type === "B" && model.source_schema && model.source_table && (
+                <p className="table-name">
+                  {model.source_schema}.{model.source_table}
+                </p>
               )}
               {model.type === "A" && (
                 <p className="table-name">POST /inbound/{model.name}</p>
               )}
+              {model.type === "B" && (
+                <p className="table-name">GET /data-models/{model.id}/mapped-preview</p>
+              )}
             </div>
             <div className="item-actions">
               <button type="button" onClick={() => editModel(model)}>
-                Edit
+                View/Edit
               </button>
               <button
                 type="button"
@@ -1177,6 +1368,504 @@ function DataModelsPage({
         ))}
       </section>
     </section>
+  );
+}
+
+function TypeBMappingDesigner({
+  form,
+  setForm,
+  editingId,
+  authHeaders,
+  updateAttribute,
+  removeAttribute,
+}) {
+  const [schemas, setSchemas] = useState([]);
+  const [tables, setTables] = useState([]);
+  const [columns, setColumns] = useState([]);
+  const [message, setMessage] = useState("");
+  const [warnings, setWarnings] = useState([]);
+  const [errors, setErrors] = useState([]);
+  const [preview, setPreview] = useState({ columns: [], rows: [] });
+  const [isLoading, setIsLoading] = useState(false);
+
+  const selectedSchema =
+    form.attributes.find((attribute) => attribute.source_schema)?.source_schema || "";
+  const selectedTable =
+    form.attributes.find((attribute) => attribute.source_table)?.source_table || "";
+
+  useEffect(() => {
+    let ignore = false;
+
+    async function loadSchemas() {
+      setIsLoading(true);
+      try {
+        const response = await fetch(`${API_BASE_URL}/db-browser/schemas`, {
+          headers: authHeaders,
+        });
+        if (!response.ok) {
+          throw new Error("Unable to load schemas");
+        }
+        const data = await response.json();
+        if (ignore) {
+          return;
+        }
+        setSchemas(data.schemas);
+        const nextSchema = selectedSchema || data.schemas.find((schema) => schema === "mdp_staging") || data.schemas[0] || "";
+        if (nextSchema && !selectedSchema) {
+          applySourceObject(nextSchema, selectedTable);
+        }
+      } catch (err) {
+        if (!ignore) {
+          setMessage(err instanceof Error ? err.message : "Unable to load schemas");
+        }
+      } finally {
+        if (!ignore) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    loadSchemas();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedSchema) {
+      return;
+    }
+    let ignore = false;
+
+    async function loadTables() {
+      setIsLoading(true);
+      try {
+        const response = await fetch(`${API_BASE_URL}/db-browser/schemas/${selectedSchema}/tables`, {
+          headers: authHeaders,
+        });
+        if (!response.ok) {
+          throw new Error("Unable to load tables");
+        }
+        const data = await response.json();
+        if (ignore) {
+          return;
+        }
+        setTables(data.tables);
+        if (selectedTable && data.tables.some((table) => table.table_name === selectedTable)) {
+          return;
+        }
+        const nextTable =
+          data.tables.find((table) => table.table_name === "stg_jde_supplier")?.table_name ||
+          data.tables[0]?.table_name ||
+          "";
+        if (nextTable) {
+          applySourceObject(selectedSchema, nextTable);
+        }
+      } catch (err) {
+        if (!ignore) {
+          setMessage(err instanceof Error ? err.message : "Unable to load tables");
+        }
+      } finally {
+        if (!ignore) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    loadTables();
+    return () => {
+      ignore = true;
+    };
+  }, [selectedSchema]);
+
+  useEffect(() => {
+    if (!selectedSchema || !selectedTable) {
+      setColumns([]);
+      return;
+    }
+    let ignore = false;
+
+    async function loadColumns() {
+      setIsLoading(true);
+      try {
+        const response = await fetch(
+          `${API_BASE_URL}/db-browser/schemas/${selectedSchema}/tables/${selectedTable}/columns`,
+          { headers: authHeaders },
+        );
+        if (!response.ok) {
+          throw new Error("Unable to load columns");
+        }
+        const data = await response.json();
+        if (!ignore) {
+          setColumns(data.columns);
+        }
+      } catch (err) {
+        if (!ignore) {
+          setMessage(err instanceof Error ? err.message : "Unable to load columns");
+        }
+      } finally {
+        if (!ignore) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    loadColumns();
+    return () => {
+      ignore = true;
+    };
+  }, [selectedSchema, selectedTable]);
+
+  function applySourceObject(sourceSchema, sourceTable) {
+    setForm((current) => ({
+      ...current,
+      attributes: current.attributes.map((attribute) => ({
+        ...attribute,
+        source_schema: sourceSchema,
+        source_table: sourceTable,
+      })),
+    }));
+    setWarnings([]);
+    setErrors([]);
+    setPreview({ columns: [], rows: [] });
+  }
+
+  function addMappedAttribute() {
+    const usedColumns = new Set(form.attributes.map((attribute) => attribute.source_column));
+    const nextColumn = columns.find((column) => !usedColumns.has(column.column_name));
+    const attributeName = attributeNameFromSourceColumn(nextColumn?.column_name);
+    setForm((current) => ({
+      ...current,
+      attributes: [
+        ...current.attributes,
+        {
+          ...emptyAttribute,
+          name: attributeName,
+          display_name: displayNameFromAttributeName(attributeName),
+          data_type: inferPlatformType(nextColumn?.data_type),
+          source_schema: selectedSchema,
+          source_table: selectedTable,
+          source_column: nextColumn?.column_name || "",
+        },
+      ],
+    }));
+  }
+
+  function generateAttributes() {
+    if (!selectedSchema || !selectedTable || columns.length === 0) {
+      setMessage("Select a source table or view with columns first.");
+      return;
+    }
+    setForm((current) => ({
+      ...current,
+      primary_key: "",
+      attributes: columns.map((column) => {
+        const attributeName = attributeNameFromSourceColumn(column.column_name);
+        return {
+          ...emptyAttribute,
+          name: attributeName,
+          display_name: displayNameFromAttributeName(attributeName),
+          data_type: inferPlatformType(column.data_type),
+          required: false,
+          source_schema: selectedSchema,
+          source_table: selectedTable,
+          source_column: column.column_name,
+        };
+      }),
+    }));
+    setMessage(`${columns.length} attributes generated from ${selectedTable}.`);
+    setWarnings([]);
+    setErrors([]);
+    setPreview({ columns: [], rows: [] });
+  }
+
+  function updateMappedAttribute(index, field, value) {
+    if (field === "source_column") {
+      const sourceColumn = columns.find((column) => column.column_name === value);
+      const attributeName = attributeNameFromSourceColumn(value);
+      setForm((current) => ({
+        ...current,
+        attributes: current.attributes.map((attribute, attributeIndex) =>
+          attributeIndex === index
+            ? {
+                ...attribute,
+                source_column: value,
+                source_schema: selectedSchema,
+                source_table: selectedTable,
+                name: attribute.name || attributeName,
+                display_name: attribute.display_name || displayNameFromAttributeName(attributeName),
+                data_type: inferPlatformType(sourceColumn?.data_type),
+              }
+            : attribute,
+        ),
+      }));
+      return;
+    }
+    updateAttribute(index, field, value);
+  }
+
+  async function validateMapping() {
+    setIsLoading(true);
+    setMessage("");
+    setErrors([]);
+    setWarnings([]);
+    try {
+      const response = await fetch(`${API_BASE_URL}/data-models/type-b/validate-mapping`, {
+        method: "POST",
+        headers: authHeaders,
+        body: JSON.stringify(compactPayload(form)),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        setErrors(Array.isArray(data?.detail) ? data.detail : [{ field: "mapping", message: formatApiDetail(data?.detail) }]);
+        setMessage("Mapping validation failed.");
+        return false;
+      }
+      setWarnings(data.warnings || []);
+      setMessage("Type B mapping is valid.");
+      return true;
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Unable to validate mapping");
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function previewMapping(useSaved = false) {
+    setIsLoading(true);
+    setMessage("");
+    setErrors([]);
+    try {
+      const response = useSaved && editingId
+        ? await fetch(`${API_BASE_URL}/data-models/${editingId}/mapped-preview?limit=20`, {
+            headers: authHeaders,
+          })
+        : await fetch(`${API_BASE_URL}/data-models/type-b/preview?limit=20`, {
+            method: "POST",
+            headers: authHeaders,
+            body: JSON.stringify(compactPayload(form)),
+          });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        setPreview({ columns: [], rows: [] });
+        setErrors(Array.isArray(data?.detail) ? data.detail : [{ field: "preview", message: formatApiDetail(data?.detail) }]);
+        setMessage("Preview failed.");
+        return;
+      }
+      const rows = data.data || [];
+      setWarnings(data.warnings || []);
+      setPreview({ columns: rows.length ? Object.keys(rows[0]) : [], rows });
+      setMessage(`${data.count || rows.length} preview rows loaded.`);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Unable to preview mapping");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  const hasPrimaryKey = Boolean(
+    form.primary_key && form.attributes.some((attribute) => attribute.name === form.primary_key),
+  );
+
+  return (
+    <section className="type-b-designer">
+      <div className="section-heading">
+        <div>
+          <p className="panel-label">Type B Mapping Designer</p>
+          <p className="helper-text">Select a staging table or view that contains migrated ERP data.</p>
+        </div>
+      </div>
+
+      <div className="form-grid">
+        <label>
+          Source Schema
+          <select
+            value={selectedSchema}
+            onChange={(event) => applySourceObject(event.target.value, "")}
+          >
+            <option value="">Select schema</option>
+            {schemas.map((schema) => (
+              <option key={schema} value={schema}>{schema}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Source Table or View
+          <select
+            value={selectedTable}
+            onChange={(event) => applySourceObject(selectedSchema, event.target.value)}
+          >
+            <option value="">Select table or view</option>
+            {tables.map((table) => (
+              <option key={table.table_name} value={table.table_name}>
+                {table.table_name} ({table.table_type})
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      {!hasPrimaryKey && (
+        <p className="warning-text">Select one primary key attribute before saving.</p>
+      )}
+
+      <div className="section-heading">
+        <p className="panel-label">Attribute Mapping</p>
+        <div className="item-actions">
+          <button type="button" onClick={addMappedAttribute}>
+            Add Attribute
+          </button>
+          <button type="button" onClick={generateAttributes}>
+            Generate Attributes from Source Columns
+          </button>
+        </div>
+      </div>
+
+      <div className="mapping-table">
+        <div className="mapping-row mapping-row--header">
+          <span>Attribute</span>
+          <span>Display</span>
+          <span>Type</span>
+          <span>Source Column</span>
+          <span>Flags</span>
+          <span>Description</span>
+          <span>Action</span>
+        </div>
+        {form.attributes.map((attribute, index) => (
+          <div className="mapping-row" key={index}>
+            <input
+              value={attribute.name}
+              onChange={(event) => updateMappedAttribute(index, "name", event.target.value)}
+              placeholder="supplier_code"
+              required
+            />
+            <input
+              value={attribute.display_name || ""}
+              onChange={(event) =>
+                updateMappedAttribute(index, "display_name", event.target.value)
+              }
+              placeholder="Supplier Code"
+            />
+            <select
+              value={attribute.data_type}
+              onChange={(event) => updateMappedAttribute(index, "data_type", event.target.value)}
+            >
+              {dataTypeOptions.map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+            <select
+              value={attribute.source_column || ""}
+              onChange={(event) => updateMappedAttribute(index, "source_column", event.target.value)}
+              required
+            >
+              <option value="">Select column</option>
+              {columns.map((column) => (
+                <option key={column.column_name} value={column.column_name}>
+                  {column.column_name} ({column.data_type})
+                </option>
+              ))}
+            </select>
+            <div className="mapping-flags">
+              <label className="compact-check">
+                <input
+                  type="checkbox"
+                  checked={attribute.required}
+                  onChange={(event) =>
+                    updateMappedAttribute(index, "required", event.target.checked)
+                  }
+                />
+                Req
+              </label>
+              <label className="compact-check">
+                <input
+                  type="checkbox"
+                  checked={attribute.is_primary_key}
+                  onChange={(event) =>
+                    updateMappedAttribute(index, "is_primary_key", event.target.checked)
+                  }
+                />
+                PK
+              </label>
+            </div>
+            <textarea
+              value={attribute.description || ""}
+              onChange={(event) =>
+                updateMappedAttribute(index, "description", event.target.value)
+              }
+              placeholder="Description"
+            />
+            <button type="button" onClick={() => removeAttribute(index)}>
+              Remove
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <p className="helper-text">
+        Preview returns data using model attribute names, not source column names.
+      </p>
+      <p className="helper-text">
+        Reserved system columns are automatically renamed with source_ prefix.
+      </p>
+
+      <div className="item-actions">
+        <button type="button" onClick={validateMapping} disabled={isLoading}>
+          Validate Mapping
+        </button>
+        <button type="button" onClick={() => previewMapping(false)} disabled={isLoading}>
+          Preview Unsaved Mapping
+        </button>
+        {editingId && (
+          <button type="button" onClick={() => previewMapping(true)} disabled={isLoading}>
+            Preview Saved Model
+          </button>
+        )}
+      </div>
+
+      {message && <p className="form-message">{message}</p>}
+      {warnings.length > 0 && <MessageList title="Warnings" items={warnings} type="warning" />}
+      {errors.length > 0 && <MessageList title="Validation Errors" items={errors} type="error" />}
+
+      <div className="browser-results">
+        {preview.rows.length > 0 ? (
+          <table>
+            <thead>
+              <tr>
+                {preview.columns.map((column) => (
+                  <th key={column}>{column}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {preview.rows.map((row, rowIndex) => (
+                <tr key={rowIndex}>
+                  {preview.columns.map((column) => (
+                    <td key={column}>{JSON.stringify(row[column])}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <pre>[]</pre>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function MessageList({ title, items, type }) {
+  return (
+    <div className={`message-list message-list--${type}`}>
+      <p className="panel-label">{title}</p>
+      {items.map((item, index) => (
+        <p key={index}>
+          <strong>{item.field || "message"}:</strong> {item.message || item.msg || JSON.stringify(item)}
+        </p>
+      ))}
+    </div>
   );
 }
 

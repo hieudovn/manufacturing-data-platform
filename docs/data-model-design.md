@@ -397,5 +397,29 @@ Current limitations:
 
 - One source table per Type B model.
 - No Type B outbound API yet.
-- No Type B mapping UI yet.
 - No Oracle connector or sync jobs yet.
+
+## Type B Mapping UI Flow
+
+The Data Models page includes a Type B Mapping Designer for creating linked models without writing JSON manually.
+
+Basic flow:
+
+1. Choose `Type B: Linked Model`.
+2. Enter the model business metadata.
+3. Select a source schema, usually `mdp_staging`.
+4. Select a source table or view.
+5. Click `Generate Attributes from Source Columns`, or add mapped attributes manually.
+6. Select one primary key attribute.
+7. Validate the mapping.
+8. Preview mapped rows.
+9. Save the model.
+
+For `supplier`, select `mdp_staging.stg_jde_supplier` and mark `supplier_code` as the primary key. Suggested fields are `supplier_code`, `supplier_name`, `tax_code`, `supplier_type`, `country`, `city`, and `status`.
+
+For `purchase_order_summary`, select `mdp_staging.vw_jde_purchase_order_summary` and mark `po_no` as the primary key. Suggested fields are `po_no`, `supplier_code`, `supplier_name`, `buyer_name`, `company_code`, `branch_plant`, `order_date`, `currency`, `po_status`, `total_amount`, `line_count`, `total_ordered_quantity`, `total_received_quantity`, `open_line_count`, `invoice_count`, `total_invoice_amount`, `total_open_invoice_amount`, and `payment_status_summary`.
+
+Type A and Type B differ in the UI:
+
+- Type A creates a generated PostgreSQL table for ingested data.
+- Type B links to an existing staging table or view and does not create a new table.
