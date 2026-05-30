@@ -5,6 +5,7 @@ from sqlalchemy import text
 
 
 STAGING_SCHEMA = "mdp_staging"
+PURCHASE_ORDER_SUMMARY_VIEW = "vw_jde_purchase_order_summary"
 
 TABLE_PRIMARY_KEYS = {
     "stg_jde_supplier": "supplier_code",
@@ -517,7 +518,148 @@ def seed_procurement_staging_data(executor: Any) -> dict[str, int]:
         for row in rows:
             _execute(executor, statement, row)
 
+    create_purchase_order_summary_view(executor)
     return get_procurement_staging_counts(executor)
+
+
+def create_purchase_order_summary_view(executor: Any) -> None:
+    dialect_name = _dialect_name(executor)
+    if dialect_name == "postgresql":
+        _execute(
+            executor,
+            f"""
+            CREATE OR REPLACE VIEW {STAGING_SCHEMA}.{PURCHASE_ORDER_SUMMARY_VIEW} AS
+            WITH line_summary AS (
+                SELECT
+                    po_no,
+                    COUNT(DISTINCT po_line_id)::integer AS line_count,
+                    COALESCE(SUM(quantity_ordered), 0)::double precision AS total_ordered_quantity,
+                    COALESCE(SUM(quantity_received), 0)::double precision AS total_received_quantity,
+                    COUNT(*) FILTER (WHERE line_status = 'open')::integer AS open_line_count,
+                    MAX(updated_at) AS lines_updated_at
+                FROM {STAGING_SCHEMA}.stg_jde_po_line
+                GROUP BY po_no
+            ),
+            invoice_summary AS (
+                SELECT
+                    po_no,
+                    COUNT(DISTINCT invoice_no)::integer AS invoice_count,
+                    COALESCE(SUM(gross_amount), 0)::double precision AS total_invoice_amount,
+                    COALESCE(SUM(open_amount), 0)::double precision AS total_open_invoice_amount,
+                    MAX(updated_at) AS invoices_updated_at
+                FROM {STAGING_SCHEMA}.stg_jde_ap_invoice
+                WHERE po_no IS NOT NULL
+                GROUP BY po_no
+            )
+            SELECT
+                h.po_no,
+                h.supplier_code,
+                s.supplier_name,
+                h.buyer_code,
+                h.buyer_name,
+                h.company_code,
+                h.branch_plant,
+                h.order_date,
+                h.currency,
+                h.po_status,
+                h.total_amount,
+                COALESCE(l.line_count, 0) AS line_count,
+                COALESCE(l.total_ordered_quantity, 0) AS total_ordered_quantity,
+                COALESCE(l.total_received_quantity, 0) AS total_received_quantity,
+                COALESCE(l.open_line_count, 0) AS open_line_count,
+                COALESCE(i.invoice_count, 0) AS invoice_count,
+                COALESCE(i.total_invoice_amount, 0) AS total_invoice_amount,
+                COALESCE(i.total_open_invoice_amount, 0) AS total_open_invoice_amount,
+                CASE
+                    WHEN COALESCE(i.invoice_count, 0) = 0 THEN 'no_invoice'
+                    WHEN COALESCE(i.total_open_invoice_amount, 0) = 0 AND COALESCE(i.invoice_count, 0) > 0 THEN 'paid'
+                    WHEN COALESCE(i.total_open_invoice_amount, 0) > 0 THEN 'open'
+                    ELSE 'unknown'
+                END AS payment_status_summary,
+                GREATEST(
+                    h.updated_at,
+                    COALESCE(s.updated_at, h.updated_at),
+                    COALESCE(l.lines_updated_at, h.updated_at),
+                    COALESCE(i.invoices_updated_at, h.updated_at)
+                ) AS updated_at
+            FROM {STAGING_SCHEMA}.stg_jde_po_header h
+            LEFT JOIN {STAGING_SCHEMA}.stg_jde_supplier s
+                ON h.supplier_code = s.supplier_code
+            LEFT JOIN line_summary l
+                ON h.po_no = l.po_no
+            LEFT JOIN invoice_summary i
+                ON h.po_no = i.po_no
+            """,
+        )
+        return
+
+    _execute(executor, f"DROP VIEW IF EXISTS {PURCHASE_ORDER_SUMMARY_VIEW}")
+    _execute(
+        executor,
+        f"""
+        CREATE VIEW {PURCHASE_ORDER_SUMMARY_VIEW} AS
+        WITH line_summary AS (
+            SELECT
+                po_no,
+                COUNT(DISTINCT po_line_id) AS line_count,
+                COALESCE(SUM(quantity_ordered), 0) AS total_ordered_quantity,
+                COALESCE(SUM(quantity_received), 0) AS total_received_quantity,
+                SUM(CASE WHEN line_status = 'open' THEN 1 ELSE 0 END) AS open_line_count,
+                MAX(updated_at) AS lines_updated_at
+            FROM stg_jde_po_line
+            GROUP BY po_no
+        ),
+        invoice_summary AS (
+            SELECT
+                po_no,
+                COUNT(DISTINCT invoice_no) AS invoice_count,
+                COALESCE(SUM(gross_amount), 0) AS total_invoice_amount,
+                COALESCE(SUM(open_amount), 0) AS total_open_invoice_amount,
+                MAX(updated_at) AS invoices_updated_at
+            FROM stg_jde_ap_invoice
+            WHERE po_no IS NOT NULL
+            GROUP BY po_no
+        )
+        SELECT
+            h.po_no,
+            h.supplier_code,
+            s.supplier_name,
+            h.buyer_code,
+            h.buyer_name,
+            h.company_code,
+            h.branch_plant,
+            h.order_date,
+            h.currency,
+            h.po_status,
+            h.total_amount,
+            COALESCE(l.line_count, 0) AS line_count,
+            COALESCE(l.total_ordered_quantity, 0) AS total_ordered_quantity,
+            COALESCE(l.total_received_quantity, 0) AS total_received_quantity,
+            COALESCE(l.open_line_count, 0) AS open_line_count,
+            COALESCE(i.invoice_count, 0) AS invoice_count,
+            COALESCE(i.total_invoice_amount, 0) AS total_invoice_amount,
+            COALESCE(i.total_open_invoice_amount, 0) AS total_open_invoice_amount,
+            CASE
+                WHEN COALESCE(i.invoice_count, 0) = 0 THEN 'no_invoice'
+                WHEN COALESCE(i.total_open_invoice_amount, 0) = 0 AND COALESCE(i.invoice_count, 0) > 0 THEN 'paid'
+                WHEN COALESCE(i.total_open_invoice_amount, 0) > 0 THEN 'open'
+                ELSE 'unknown'
+            END AS payment_status_summary,
+            MAX(
+                h.updated_at,
+                COALESCE(s.updated_at, h.updated_at),
+                COALESCE(l.lines_updated_at, h.updated_at),
+                COALESCE(i.invoices_updated_at, h.updated_at)
+            ) AS updated_at
+        FROM stg_jde_po_header h
+        LEFT JOIN stg_jde_supplier s
+            ON h.supplier_code = s.supplier_code
+        LEFT JOIN line_summary l
+            ON h.po_no = l.po_no
+        LEFT JOIN invoice_summary i
+            ON h.po_no = i.po_no
+        """
+    )
 
 
 def get_procurement_staging_counts(executor: Any) -> dict[str, int]:

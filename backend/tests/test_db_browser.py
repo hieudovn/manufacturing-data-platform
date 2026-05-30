@@ -1,4 +1,6 @@
 from fastapi.testclient import TestClient
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 from app.services.procurement_staging_service import EXPECTED_TABLE_COUNTS
 
@@ -135,3 +137,94 @@ def test_preview_requires_authentication(client: TestClient) -> None:
     )
 
     assert response.status_code == 401
+
+
+def test_purchase_order_summary_view_exists(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    db_session: Session,
+) -> None:
+    seed_staging(client, auth_headers)
+
+    result = db_session.execute(
+        text(
+            """
+            SELECT 1
+            FROM sqlite_master
+            WHERE type = 'view' AND name = 'vw_jde_purchase_order_summary'
+            """
+        )
+    )
+
+    assert result.first() is not None
+
+
+def test_db_browser_lists_purchase_order_summary_view(
+    client: TestClient,
+    auth_headers: dict[str, str],
+) -> None:
+    seed_staging(client, auth_headers)
+
+    response = client.get(
+        "/db-browser/schemas/mdp_staging/tables",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    views = {
+        table["table_name"]: table["table_type"]
+        for table in response.json()["tables"]
+    }
+    assert views["vw_jde_purchase_order_summary"] == "VIEW"
+
+
+def test_purchase_order_summary_columns_include_po_and_supplier_name(
+    client: TestClient,
+    auth_headers: dict[str, str],
+) -> None:
+    seed_staging(client, auth_headers)
+
+    response = client.get(
+        "/db-browser/schemas/mdp_staging/tables/vw_jde_purchase_order_summary/columns",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    columns = {column["column_name"] for column in response.json()["columns"]}
+    assert {"po_no", "supplier_name"}.issubset(columns)
+
+
+def test_purchase_order_summary_preview_returns_po_2026_0001(
+    client: TestClient,
+    auth_headers: dict[str, str],
+) -> None:
+    seed_staging(client, auth_headers)
+
+    response = client.get(
+        "/db-browser/schemas/mdp_staging/tables/vw_jde_purchase_order_summary/preview",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    rows = response.json()["rows"]
+    first_po = next(row for row in rows if row["po_no"] == "PO-2026-0001")
+    assert first_po["supplier_name"] == "ABC Industrial Supplies"
+    assert first_po["line_count"] == 2
+    assert first_po["payment_status_summary"] == "open"
+
+
+def test_purchase_order_summary_view_has_one_row_per_po(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    db_session: Session,
+) -> None:
+    seed_staging(client, auth_headers)
+
+    view_count = db_session.execute(
+        text("SELECT COUNT(*) FROM vw_jde_purchase_order_summary")
+    ).scalar_one()
+    po_count = db_session.execute(
+        text("SELECT COUNT(*) FROM stg_jde_po_header")
+    ).scalar_one()
+
+    assert view_count == po_count == 5

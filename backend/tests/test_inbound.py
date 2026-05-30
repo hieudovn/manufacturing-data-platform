@@ -127,6 +127,7 @@ def test_type_b_model_inbound_returns_400(
     client: TestClient,
     auth_headers: dict[str, str],
 ) -> None:
+    client.post("/admin/demo/seed-procurement-staging", headers=auth_headers)
     create_response = client.post("/data-models", headers=auth_headers, json=type_b_payload())
     assert create_response.status_code == 201
 

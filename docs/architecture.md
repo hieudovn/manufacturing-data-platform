@@ -28,6 +28,8 @@ The `mdp_staging` PostgreSQL schema contains mock JDE procurement staging tables
 
 The DB Browser provides JWT-protected, read-only metadata and preview access to verified PostgreSQL schemas and tables. It is intended to help administrators inspect staging data before defining Type B Linked Data Models.
 
+Type B Linked Data Model backend support validates mappings from model attributes to existing PostgreSQL staging columns and can preview mapped rows without creating physical tables. Type B outbound APIs remain deferred.
+
 ### Database
 
 PostgreSQL 16 is the primary application database. It uses the default MVP database settings:
@@ -65,6 +67,7 @@ Implemented:
 - Connection metadata CRUD and basic connection testing
 - Mock JDE procurement staging tables and seed data
 - DB Table Browser for schemas, tables, columns, and preview rows
+- Type B mapping validation and mapped preview backend APIs
 - SQLAlchemy database connection setup
 - Alembic migration setup
 - React/Vite dashboard shell

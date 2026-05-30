@@ -342,3 +342,54 @@ Security rules:
 - `limit` defaults to `50` and is capped at `100`.
 
 The DB Browser is intended for inspecting staging data before creating Type B Linked Data Models. It does not implement Type B mapping or Type B outbound APIs.
+
+## Type B Linked Data Models
+
+Type B models link configured attributes to existing PostgreSQL staging columns. They do not create generated tables.
+
+Type B mapping endpoints require JWT authentication:
+
+- `POST /data-models/type-b/validate-mapping`
+- `POST /data-models/type-b/preview`
+- `GET /data-models/{id}/mapped-preview`
+
+Validation rules:
+
+- Every Type B attribute requires `source_schema`, `source_table`, and `source_column`.
+- Allowed schemas are `mdp_staging`, `public`, and `mdp_data`.
+- Source schema, table, and column identifiers must be lowercase snake_case.
+- Source schema, table, and column must exist.
+- All attributes must map to one source table per model.
+- The declared model data type must be compatible with the source column type.
+- A primary key is required.
+- Attribute names may differ from source column names.
+- Missing `source_column` is rejected as a mapping configuration error.
+- The primary key must match an attribute name and map to a valid source column.
+- Primary key nullability metadata is reported as a warning, not a hard error. PostgreSQL views often report columns as nullable even when the underlying source is logically non-null.
+
+Draft validation response:
+
+```json
+{
+  "status": "success",
+  "message": "Type B mapping is valid",
+  "warnings": [
+    {
+      "field": "primary_key",
+      "message": "Primary key source column is from a view. Nullability cannot be reliably enforced by information_schema."
+    }
+  ],
+  "source_schema": "mdp_staging",
+  "source_table": "vw_jde_purchase_order_summary",
+  "mapped_columns": [
+    {
+      "attribute": "po_no",
+      "source_column": "po_no",
+      "source_data_type": "text",
+      "model_data_type": "text"
+    }
+  ]
+}
+```
+
+Preview responses return flat rows using model attribute names. Type B outbound APIs, Oracle connector, sync jobs, and mapping UI are not implemented in this milestone.

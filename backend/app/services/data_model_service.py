@@ -9,6 +9,7 @@ from app.models.data_model import DataModel
 from app.schemas.data_model import DataModelCreate, DataModelUpdate
 from app.services import table_generator
 from app.services.table_generator import TableGenerationError
+from app.services.type_b_mapping_service import validate_type_b_mapping
 
 
 def get_data_model(db: Session, data_model_id: uuid.UUID) -> DataModel | None:
@@ -98,6 +99,9 @@ def create_data_model(db: Session, data_model_in: DataModelCreate) -> DataModel:
                     f"Generated table already exists: {generated_table}"
                 )
             payload["generated_table"] = generated_table
+        if data_model_in.type == "B":
+            validate_type_b_mapping(db, data_model_in)
+            payload["generated_table"] = None
 
         data_model = DataModel(**payload)
         db.add(data_model)
@@ -121,6 +125,9 @@ def update_data_model(
 ) -> DataModel:
     # TODO: Handle generated table schema evolution in a later milestone.
     update_payload = validate_updated_data_model(data_model, data_model_in)
+    validated = DataModelCreate.model_validate(update_payload)
+    if validated.type == "B":
+        validate_type_b_mapping(db, validated)
     update_payload.pop("generated_table", None)
     for field, value in update_payload.items():
         setattr(data_model, field, value)

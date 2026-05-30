@@ -84,12 +84,24 @@ def list_tables(db: Session, schema_name: str) -> list[dict[str, str]]:
     dialect_name = _dialect_name(db)
     if dialect_name != "postgresql":
         rows = db.execute(
-            text("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
+            text(
+                """
+                SELECT name, type
+                FROM sqlite_master
+                WHERE type IN ('table', 'view')
+                ORDER BY name
+                """
+            )
         ).mappings()
         return [
-            {"table_name": row["name"], "table_type": "BASE TABLE"}
+            {
+                "table_name": row["name"],
+                "table_type": "VIEW" if row["type"] == "view" else "BASE TABLE",
+            }
             for row in rows
-            if schema_name != "mdp_staging" or row["name"].startswith("stg_")
+            if schema_name != "mdp_staging"
+            or row["name"].startswith("stg_")
+            or row["name"].startswith("vw_")
         ]
 
     rows = db.execute(
@@ -115,7 +127,7 @@ def table_exists(db: Session, schema_name: str, table_name: str) -> bool:
     dialect_name = _dialect_name(db)
     if dialect_name != "postgresql":
         result = db.execute(
-            text("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = :table"),
+            text("SELECT 1 FROM sqlite_master WHERE type IN ('table', 'view') AND name = :table"),
             {"table": table_name},
         )
         return result.first() is not None
@@ -138,6 +150,25 @@ def ensure_table_exists(db: Session, schema_name: str, table_name: str) -> None:
         raise DbBrowserNotFoundError(f"Table not found: {schema_name}.{table_name}")
 
 
+def _sqlite_column_type(column_name: str, declared_type: str | None) -> str:
+    if declared_type:
+        return declared_type.lower()
+    if column_name in {"line_count", "open_line_count", "invoice_count", "line_no"}:
+        return "integer"
+    if (
+        column_name.startswith("total_")
+        or column_name.endswith("_amount")
+        or column_name.endswith("_quantity")
+        or column_name in {"quantity_ordered", "quantity_received", "unit_cost", "line_amount"}
+    ):
+        return "double precision"
+    if column_name.endswith("_date"):
+        return "date"
+    if column_name.endswith("_at"):
+        return "timestamp"
+    return "text"
+
+
 def list_columns(db: Session, schema_name: str, table_name: str) -> list[dict[str, Any]]:
     ensure_table_exists(db, schema_name, table_name)
     dialect_name = _dialect_name(db)
@@ -146,8 +177,8 @@ def list_columns(db: Session, schema_name: str, table_name: str) -> list[dict[st
         return [
             {
                 "column_name": row["name"],
-                "data_type": row["type"].lower(),
-                "is_nullable": "NO" if row["notnull"] else "YES",
+                "data_type": _sqlite_column_type(row["name"], row["type"]),
+                "is_nullable": "NO" if row["notnull"] or row["pk"] else "YES",
                 "ordinal_position": row["cid"] + 1,
                 "column_default": row["dflt_value"],
             }

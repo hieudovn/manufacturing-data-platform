@@ -4,6 +4,8 @@ The DB Browser gives administrators read-only visibility into PostgreSQL schemas
 
 Its first use is inspecting `mdp_staging` data before creating Type B Linked Data Models.
 
+It lists both base tables and views, including curated staging objects such as `mdp_staging.vw_jde_purchase_order_summary`.
+
 ## APIs
 
 ```text
@@ -33,7 +35,7 @@ GET /db-browser/schemas/mdp_staging/tables/stg_jde_supplier/preview
 
 ## Current Limitations
 
-- No Type B data model mapping.
+- No Type B mapping UI.
 - No Type B outbound API.
 - No Oracle connector.
 - No sync jobs.

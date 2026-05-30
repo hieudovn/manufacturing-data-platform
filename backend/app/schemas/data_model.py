@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 
 SNAKE_CASE_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -18,6 +18,7 @@ class DataModelAttribute(BaseModel):
     required: bool = False
     description: str | None = None
     source_path: str | None = None
+    source_schema: str | None = None
     source_table: str | None = None
     source_column: str | None = None
     is_primary_key: bool = False
@@ -31,6 +32,10 @@ class DataModelAttribute(BaseModel):
     def validate_attribute_name(self) -> "DataModelAttribute":
         if not SNAKE_CASE_PATTERN.fullmatch(self.name):
             raise ValueError("Attribute name must be lowercase snake_case")
+        for field_name in ("source_schema", "source_table", "source_column"):
+            value = getattr(self, field_name)
+            if value is not None and not SNAKE_CASE_PATTERN.fullmatch(value):
+                raise ValueError(f"{field_name} must be lowercase snake_case")
         return self
 
 
@@ -117,3 +122,23 @@ class DataModelRead(DataModelBase):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+    @computed_field
+    @property
+    def source_schema(self) -> str | None:
+        values = {
+            attribute.source_schema
+            for attribute in self.attributes
+            if attribute.source_schema is not None
+        }
+        return values.pop() if len(values) == 1 else None
+
+    @computed_field
+    @property
+    def source_table(self) -> str | None:
+        values = {
+            attribute.source_table
+            for attribute in self.attributes
+            if attribute.source_table is not None
+        }
+        return values.pop() if len(values) == 1 else None

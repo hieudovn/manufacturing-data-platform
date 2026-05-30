@@ -61,8 +61,9 @@ def type_b_payload(name: str = "supplier") -> dict:
                 "data_type": "text",
                 "required": True,
                 "description": "Supplier code from JDE Address Book",
-                "source_table": "stg_jde_f0101",
-                "source_column": "an8",
+                "source_schema": "mdp_staging",
+                "source_table": "stg_jde_supplier",
+                "source_column": "supplier_code",
                 "is_primary_key": True,
                 "sensitivity": "internal",
                 "synonyms": ["vendor code", "supplier id"],
@@ -73,8 +74,9 @@ def type_b_payload(name: str = "supplier") -> dict:
                 "data_type": "text",
                 "required": True,
                 "description": "Supplier name from JDE Address Book",
-                "source_table": "stg_jde_f0101",
-                "source_column": "alph",
+                "source_schema": "mdp_staging",
+                "source_table": "stg_jde_supplier",
+                "source_column": "supplier_name",
                 "sensitivity": "internal",
                 "synonyms": ["vendor name"],
             },
@@ -98,12 +100,15 @@ def test_create_type_b_data_model(
     client: TestClient,
     auth_headers: dict[str, str],
 ) -> None:
+    client.post("/admin/demo/seed-procurement-staging", headers=auth_headers)
     response = client.post("/data-models", headers=auth_headers, json=type_b_payload())
 
     assert response.status_code == 201
     assert response.json()["name"] == "supplier"
     assert response.json()["type"] == "B"
     assert response.json()["generated_table"] is None
+    assert response.json()["source_schema"] == "mdp_staging"
+    assert response.json()["source_table"] == "stg_jde_supplier"
 
 
 def test_list_data_models(client: TestClient, auth_headers: dict[str, str]) -> None:

@@ -18,6 +18,12 @@ from app.services.data_model_service import (
     update_data_model,
 )
 from app.services.table_generator import TableGenerationError
+from app.services.type_b_mapping_service import (
+    TypeBMappingError,
+    preview_saved_type_b_model,
+    preview_type_b_mapping,
+    validate_type_b_mapping,
+)
 
 
 router = APIRouter(
@@ -53,6 +59,11 @@ def create_data_model_endpoint(
         return create_data_model(db, data_model_in)
     except TableGenerationError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except TypeBMappingError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=exc.errors,
+        ) from exc
 
 
 @router.get("", response_model=list[DataModelRead])
@@ -72,6 +83,36 @@ def list_data_models_endpoint(
     )
 
 
+@router.post("/type-b/validate-mapping")
+def validate_type_b_mapping_endpoint(
+    data_model_in: DataModelCreate,
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    try:
+        return validate_type_b_mapping(db, data_model_in)
+    except TypeBMappingError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=exc.errors,
+        ) from exc
+
+
+@router.post("/type-b/preview")
+def preview_type_b_mapping_endpoint(
+    data_model_in: DataModelCreate,
+    db: Annotated[Session, Depends(get_db)],
+    limit: Annotated[int, Query(ge=1)] = 20,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> dict:
+    try:
+        return preview_type_b_mapping(db, data_model_in, limit=limit, offset=offset)
+    except TypeBMappingError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=exc.errors,
+        ) from exc
+
+
 @router.get("/{data_model_id}", response_model=DataModelRead)
 def get_data_model_endpoint(
     data_model_id: uuid.UUID,
@@ -84,6 +125,28 @@ def get_data_model_endpoint(
             detail="Data model not found",
         )
     return data_model
+
+
+@router.get("/{data_model_id}/mapped-preview")
+def get_data_model_mapped_preview_endpoint(
+    data_model_id: uuid.UUID,
+    db: Annotated[Session, Depends(get_db)],
+    limit: Annotated[int, Query(ge=1)] = 20,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> dict:
+    data_model = get_data_model(db, data_model_id)
+    if data_model is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Data model not found",
+        )
+    try:
+        return preview_saved_type_b_model(db, data_model, limit=limit, offset=offset)
+    except TypeBMappingError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=exc.errors,
+        ) from exc
 
 
 @router.put("/{data_model_id}", response_model=DataModelRead)
@@ -106,6 +169,11 @@ def update_data_model_endpoint(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=exc.errors(include_context=False),
+        ) from exc
+    except TypeBMappingError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=exc.errors,
         ) from exc
 
 

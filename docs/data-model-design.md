@@ -19,6 +19,16 @@ Examples:
 
 Type B models describe data linked or mapped from existing PostgreSQL staging tables. These staging tables may later receive data from ERP or database sources such as Oracle JDE or SQL Server. Type B models do not create generated tables.
 
+For the MVP, Type B models support one source table per model. Each mapped attribute must include:
+
+- `source_schema`
+- `source_table`
+- `source_column`
+
+The backend validates that the schema, table, and column exist before saving the model or previewing rows.
+
+Attribute names may differ from source column names. For example, a model attribute named `supplier_no` can map to `source_column: "supplier_code"`. Missing `source_column` is a mapping configuration error, not a nullable data value.
+
 Examples:
 
 - `supplier`
@@ -34,6 +44,7 @@ Each data model has a required non-empty `attributes` array. Each attribute supp
 - `required`: whether a value is required
 - `description`: business or technical description
 - `source_path`: JSONPath-style source location for Type A models
+- `source_schema`: source schema for Type B models
 - `source_table`: staging table for Type B models
 - `source_column`: staging column for Type B models
 - `is_primary_key`: marks the model primary key attribute
@@ -43,7 +54,7 @@ Each data model has a required non-empty `attributes` array. Each attribute supp
 - `sensitivity`: attribute-level sensitivity classification
 - `synonyms`: alternate business terms for semantic search and AI use
 
-If `primary_key` is provided at the model level, it must match one of the attribute names. If an attribute has `is_primary_key=true`, the model primary key is set to that attribute.
+If `primary_key` is provided at the model level, it must match one of the attribute names. If an attribute has `is_primary_key=true`, the model primary key is set to that attribute. For Type B models, the primary key attribute must map to a valid source column. Nullable source metadata is returned as a validation warning instead of a hard failure.
 
 Attribute names cannot conflict with generated system columns:
 
@@ -188,8 +199,9 @@ The metadata fields prepare the platform for later AI, semantic layer, and knowl
       "data_type": "text",
       "required": true,
       "description": "Supplier code from JDE Address Book",
-      "source_table": "stg_jde_f0101",
-      "source_column": "an8",
+      "source_schema": "mdp_staging",
+      "source_table": "stg_jde_supplier",
+      "source_column": "supplier_code",
       "is_primary_key": true,
       "sensitivity": "internal",
       "synonyms": ["vendor code", "supplier id"]
@@ -200,11 +212,190 @@ The metadata fields prepare the platform for later AI, semantic layer, and knowl
       "data_type": "text",
       "required": true,
       "description": "Supplier name from JDE Address Book",
-      "source_table": "stg_jde_f0101",
-      "source_column": "alph",
+      "source_schema": "mdp_staging",
+      "source_table": "stg_jde_supplier",
+      "source_column": "supplier_name",
       "sensitivity": "internal",
       "synonyms": ["vendor name"]
     }
   ]
 }
 ```
+
+## Example Type B: Supplier From MVP Staging
+
+```json
+{
+  "name": "supplier",
+  "display_name": "Supplier",
+  "type": "B",
+  "primary_key": "supplier_code",
+  "attributes": [
+    {
+      "name": "supplier_code",
+      "display_name": "Supplier Code",
+      "data_type": "text",
+      "required": true,
+      "source_schema": "mdp_staging",
+      "source_table": "stg_jde_supplier",
+      "source_column": "supplier_code",
+      "is_primary_key": true,
+      "sensitivity": "internal",
+      "synonyms": ["vendor code", "supplier id"]
+    },
+    {
+      "name": "supplier_name",
+      "display_name": "Supplier Name",
+      "data_type": "text",
+      "required": true,
+      "source_schema": "mdp_staging",
+      "source_table": "stg_jde_supplier",
+      "source_column": "supplier_name"
+    },
+    {
+      "name": "country",
+      "display_name": "Country",
+      "data_type": "text",
+      "source_schema": "mdp_staging",
+      "source_table": "stg_jde_supplier",
+      "source_column": "country"
+    },
+    {
+      "name": "status",
+      "display_name": "Status",
+      "data_type": "text",
+      "source_schema": "mdp_staging",
+      "source_table": "stg_jde_supplier",
+      "source_column": "status"
+    }
+  ]
+}
+```
+
+## Example Type B: Purchase Order
+
+```json
+{
+  "name": "purchase_order",
+  "display_name": "Purchase Order",
+  "type": "B",
+  "primary_key": "po_no",
+  "attributes": [
+    {
+      "name": "po_no",
+      "display_name": "PO Number",
+      "data_type": "text",
+      "required": true,
+      "source_schema": "mdp_staging",
+      "source_table": "stg_jde_po_header",
+      "source_column": "po_no",
+      "is_primary_key": true
+    },
+    {
+      "name": "supplier_code",
+      "display_name": "Supplier Code",
+      "data_type": "text",
+      "source_schema": "mdp_staging",
+      "source_table": "stg_jde_po_header",
+      "source_column": "supplier_code"
+    },
+    {
+      "name": "order_date",
+      "display_name": "Order Date",
+      "data_type": "date",
+      "source_schema": "mdp_staging",
+      "source_table": "stg_jde_po_header",
+      "source_column": "order_date"
+    },
+    {
+      "name": "total_amount",
+      "display_name": "Total Amount",
+      "data_type": "float",
+      "source_schema": "mdp_staging",
+      "source_table": "stg_jde_po_header",
+      "source_column": "total_amount"
+    }
+  ]
+}
+```
+
+## Example Type B: Purchase Order Summary View
+
+For multi-table procurement context, the MVP uses a curated PostgreSQL view:
+
+```text
+mdp_staging.vw_jde_purchase_order_summary
+```
+
+This keeps Type B mapping simple because the model still maps to one source object.
+
+```json
+{
+  "name": "purchase_order_summary",
+  "display_name": "Purchase Order Summary",
+  "type": "B",
+  "primary_key": "po_no",
+  "attributes": [
+    {
+      "name": "po_no",
+      "display_name": "PO Number",
+      "data_type": "text",
+      "required": true,
+      "source_schema": "mdp_staging",
+      "source_table": "vw_jde_purchase_order_summary",
+      "source_column": "po_no",
+      "is_primary_key": true
+    },
+    {
+      "name": "supplier_name",
+      "display_name": "Supplier Name",
+      "data_type": "text",
+      "source_schema": "mdp_staging",
+      "source_table": "vw_jde_purchase_order_summary",
+      "source_column": "supplier_name"
+    },
+    {
+      "name": "line_count",
+      "display_name": "Line Count",
+      "data_type": "integer",
+      "source_schema": "mdp_staging",
+      "source_table": "vw_jde_purchase_order_summary",
+      "source_column": "line_count"
+    },
+    {
+      "name": "payment_status_summary",
+      "display_name": "Payment Status Summary",
+      "data_type": "text",
+      "source_schema": "mdp_staging",
+      "source_table": "vw_jde_purchase_order_summary",
+      "source_column": "payment_status_summary"
+    }
+  ]
+}
+```
+
+## Type B Mapping APIs
+
+```text
+POST /data-models/type-b/validate-mapping
+POST /data-models/type-b/preview
+GET /data-models/{id}/mapped-preview
+```
+
+These APIs require JWT authentication. Preview returns mapped rows using model attribute names, not source column names.
+
+Validation responses include a `warnings` array. Primary key configuration errors still fail, but nullable source metadata is advisory for now. For PostgreSQL views, `information_schema` may report columns as nullable even when the underlying source is logically non-null, so view primary key nullability produces this warning instead of a 422:
+
+```json
+{
+  "field": "primary_key",
+  "message": "Primary key source column is from a view. Nullability cannot be reliably enforced by information_schema."
+}
+```
+
+Current limitations:
+
+- One source table per Type B model.
+- No Type B outbound API yet.
+- No Type B mapping UI yet.
+- No Oracle connector or sync jobs yet.

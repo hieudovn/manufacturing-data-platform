@@ -161,6 +161,47 @@ mdp_data.dm_invoice
 
 Type B models store metadata only and do not generate new tables. Updating a model does not alter an already generated table in this milestone, and deactivating a model does not drop the generated table.
 
+### Type B Linked Models
+
+Type B data models link attributes to existing PostgreSQL staging columns instead of creating new tables. For the MVP, these mappings target verified tables such as `mdp_staging.stg_jde_supplier`.
+
+Current Type B rules:
+
+- All attributes must map to one source table per model.
+- `source_schema`, `source_table`, and `source_column` are required for each attribute.
+- Allowed source schemas are `mdp_staging`, `public`, and `mdp_data`.
+- The source table and columns must exist.
+- Declared model data types must be compatible with source column types.
+- A primary key is required.
+- Nullable primary key metadata produces a warning instead of a hard failure. This is especially important for PostgreSQL views, where `information_schema` often cannot reliably enforce nullability.
+
+Validate a draft Type B mapping:
+
+```bash
+curl -X POST http://localhost:8000/data-models/type-b/validate-mapping \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d "{\"name\":\"supplier\",\"display_name\":\"Supplier\",\"type\":\"B\",\"primary_key\":\"supplier_code\",\"attributes\":[{\"name\":\"supplier_code\",\"display_name\":\"Supplier Code\",\"data_type\":\"text\",\"required\":true,\"source_schema\":\"mdp_staging\",\"source_table\":\"stg_jde_supplier\",\"source_column\":\"supplier_code\",\"is_primary_key\":true},{\"name\":\"supplier_name\",\"display_name\":\"Supplier Name\",\"data_type\":\"text\",\"required\":true,\"source_schema\":\"mdp_staging\",\"source_table\":\"stg_jde_supplier\",\"source_column\":\"supplier_name\"}]}"
+```
+
+Preview an unsaved mapping:
+
+```bash
+curl -X POST "http://localhost:8000/data-models/type-b/preview?limit=20" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d @supplier-type-b.json
+```
+
+Preview a saved Type B model:
+
+```bash
+curl "http://localhost:8000/data-models/<id>/mapped-preview?limit=20" \
+  -H "Authorization: Bearer <token>"
+```
+
+Type B outbound APIs, Type B mapping UI, Oracle connector, and sync jobs are still deferred.
+
 ## Dynamic Inbound API
 
 Type A models accept authenticated flat JSON payloads at:
@@ -396,6 +437,12 @@ Simulated JDE tables:
 - `F43121`: `mdp_staging.stg_jde_po_receipt`
 - `F0411`: `mdp_staging.stg_jde_ap_invoice`
 
+Curated procurement view:
+
+- `mdp_staging.vw_jde_purchase_order_summary`
+
+This view joins and summarizes supplier, purchase order header, purchase order line, and AP invoice staging data into one row per purchase order. It exists so the MVP can create a Type B `purchase_order_summary` model against one source object while the full multi-table Type B join engine remains deferred.
+
 Reseed demo data from the API:
 
 ```bash
@@ -418,6 +465,7 @@ SELECT * FROM mdp_staging.stg_jde_po_header;
 SELECT * FROM mdp_staging.stg_jde_po_line;
 SELECT * FROM mdp_staging.stg_jde_po_receipt;
 SELECT * FROM mdp_staging.stg_jde_ap_invoice;
+SELECT * FROM mdp_staging.vw_jde_purchase_order_summary;
 ```
 
 ## DB Table Browser
