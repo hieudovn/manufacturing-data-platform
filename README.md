@@ -58,6 +58,27 @@ Stop the stack:
 docker compose down
 ```
 
+Run backend tests locally:
+
+```bash
+docker compose up -d --build
+docker compose exec backend pytest
+```
+
+Run the frontend build locally:
+
+```bash
+docker compose exec frontend npm run build
+```
+
+If you are not using the frontend container, run:
+
+```bash
+cd frontend
+npm install
+npm run build
+```
+
 ## URLs
 
 - Frontend: http://localhost:3000
