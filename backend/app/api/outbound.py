@@ -3,8 +3,9 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import get_request_auth_context
 from app.db.session import get_db
+from app.services.api_key_service import ApiKeyScopeError, AuthContext, enforce_api_key_scope
 from app.services.outbound_service import (
     OutboundQueryError,
     OutboundValidationError,
@@ -16,7 +17,6 @@ from app.services.outbound_service import (
 router = APIRouter(
     prefix="/outbound",
     tags=["outbound"],
-    dependencies=[Depends(get_current_user)],
 )
 
 
@@ -33,8 +33,10 @@ def list_outbound_records(
     offset: Annotated[int, Query(ge=0)] = 0,
     include_meta: bool = False,
     include_raw: bool = False,
+    auth_context: Annotated[AuthContext, Depends(get_request_auth_context)] = None,
 ) -> dict[str, Any]:
     try:
+        enforce_api_key_scope(auth_context, direction="outbound", model_name=model_name)
         return list_outbound(
             db,
             model_name=model_name,
@@ -44,7 +46,10 @@ def list_outbound_records(
             offset=offset,
             include_meta=include_meta,
             include_raw=include_raw,
+            auth_context=auth_context,
         )
+    except ApiKeyScopeError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except ValueError as exc:
@@ -69,8 +74,10 @@ def get_outbound_record_by_key(
     db: Annotated[Session, Depends(get_db)],
     include_meta: bool = False,
     include_raw: bool = False,
+    auth_context: Annotated[AuthContext, Depends(get_request_auth_context)] = None,
 ) -> dict[str, Any]:
     try:
+        enforce_api_key_scope(auth_context, direction="outbound", model_name=model_name)
         return get_outbound_by_key(
             db,
             model_name=model_name,
@@ -79,7 +86,10 @@ def get_outbound_record_by_key(
             endpoint=request.url.path,
             include_meta=include_meta,
             include_raw=include_raw,
+            auth_context=auth_context,
         )
+    except ApiKeyScopeError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except LookupError as exc:
         detail = str(exc)
         code = status.HTTP_404_NOT_FOUND if detail == "Record not found" or detail == "Data model not found" else status.HTTP_400_BAD_REQUEST
@@ -96,4 +106,3 @@ def get_outbound_record_by_key(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from exc
-

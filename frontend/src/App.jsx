@@ -73,6 +73,19 @@ function App() {
   const [browserLimit, setBrowserLimit] = useState(100);
   const [browserOffset, setBrowserOffset] = useState(0);
   const [browserMessage, setBrowserMessage] = useState("");
+  const [apiKeys, setApiKeys] = useState([]);
+  const [apiKeyForm, setApiKeyForm] = useState({
+    name: "",
+    description: "",
+    source_system: "",
+    allowed_directions: ["inbound", "outbound"],
+    allowed_models: "",
+    expires_at: "",
+    is_active: true,
+  });
+  const [editingApiKeyId, setEditingApiKeyId] = useState(null);
+  const [createdPlainApiKey, setCreatedPlainApiKey] = useState("");
+  const [apiKeyMessage, setApiKeyMessage] = useState("");
   const [form, setForm] = useState(emptyDataModel);
   const [editingId, setEditingId] = useState(null);
   const [modelMessage, setModelMessage] = useState("");
@@ -146,6 +159,9 @@ function App() {
     }
     if (token && page === "data-browser") {
       loadBrowserModels();
+    }
+    if (token && page === "api-keys") {
+      loadApiKeys();
     }
   }, [page, token]);
 
@@ -250,6 +266,103 @@ function App() {
     } catch (err) {
       setBrowserRecords([]);
       setBrowserMessage(err instanceof Error ? err.message : "Unable to load records");
+    }
+  }
+
+  async function loadApiKeys() {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api-keys`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        throw new Error("Unable to load API keys");
+      }
+      setApiKeys(await response.json());
+    } catch (err) {
+      setApiKeyMessage(err instanceof Error ? err.message : "Unable to load API keys");
+    }
+  }
+
+  function resetApiKeyForm() {
+    setEditingApiKeyId(null);
+    setApiKeyForm({
+      name: "",
+      description: "",
+      source_system: "",
+      allowed_directions: ["inbound", "outbound"],
+      allowed_models: "",
+      expires_at: "",
+      is_active: true,
+    });
+  }
+
+  function editApiKey(apiKey) {
+    setEditingApiKeyId(apiKey.id);
+    setCreatedPlainApiKey("");
+    setApiKeyForm({
+      name: apiKey.name,
+      description: apiKey.description || "",
+      source_system: apiKey.source_system || "",
+      allowed_directions: apiKey.allowed_directions,
+      allowed_models: apiKey.allowed_models?.join(", ") || "",
+      expires_at: apiKey.expires_at ? apiKey.expires_at.slice(0, 16) : "",
+      is_active: apiKey.is_active,
+    });
+  }
+
+  async function saveApiKey(event) {
+    event.preventDefault();
+    setApiKeyMessage("");
+    setCreatedPlainApiKey("");
+    const payload = {
+      name: apiKeyForm.name,
+      description: apiKeyForm.description || null,
+      source_system: apiKeyForm.source_system || null,
+      allowed_directions: apiKeyForm.allowed_directions,
+      allowed_models: apiKeyForm.allowed_models
+        ? apiKeyForm.allowed_models.split(",").map((item) => item.trim()).filter(Boolean)
+        : null,
+      expires_at: apiKeyForm.expires_at ? new Date(apiKeyForm.expires_at).toISOString() : null,
+      is_active: apiKeyForm.is_active,
+    };
+    const url = editingApiKeyId
+      ? `${API_BASE_URL}/api-keys/${editingApiKeyId}`
+      : `${API_BASE_URL}/api-keys`;
+    const method = editingApiKeyId ? "PUT" : "POST";
+    try {
+      const response = await fetch(url, {
+        method,
+        headers: authHeaders,
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        throw new Error("Unable to save API key");
+      }
+      const data = await response.json();
+      if (data.api_key) {
+        setCreatedPlainApiKey(data.api_key);
+      }
+      resetApiKeyForm();
+      await loadApiKeys();
+      setApiKeyMessage(editingApiKeyId ? "API key updated." : "API key created.");
+    } catch (err) {
+      setApiKeyMessage(err instanceof Error ? err.message : "Unable to save API key");
+    }
+  }
+
+  async function deactivateApiKey(apiKeyId) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api-keys/${apiKeyId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        throw new Error("Unable to deactivate API key");
+      }
+      await loadApiKeys();
+      setApiKeyMessage("API key deactivated.");
+    } catch (err) {
+      setApiKeyMessage(err instanceof Error ? err.message : "Unable to deactivate API key");
     }
   }
 
@@ -390,7 +503,9 @@ function App() {
                 ? "Data Models"
                 : page === "data-browser"
                   ? "Data Browser"
-                  : "Transactions"}
+                  : page === "api-keys"
+                    ? "API Keys"
+                    : "Transactions"}
           </h1>
           <p className="summary">
             Authenticated workspace for configurable manufacturing data services.
@@ -405,6 +520,9 @@ function App() {
           </button>
           <button type="button" onClick={() => setPage("data-browser")}>
             Data Browser
+          </button>
+          <button type="button" onClick={() => setPage("api-keys")}>
+            API Keys
           </button>
           <button type="button" onClick={() => setPage("transactions")}>
             Transactions
@@ -444,6 +562,19 @@ function App() {
           records={browserRecords}
           message={browserMessage}
           loadRecords={loadBrowserRecords}
+        />
+      ) : page === "api-keys" ? (
+        <ApiKeysPage
+          apiKeys={apiKeys}
+          form={apiKeyForm}
+          setForm={setApiKeyForm}
+          editingId={editingApiKeyId}
+          createdPlainApiKey={createdPlainApiKey}
+          message={apiKeyMessage}
+          saveApiKey={saveApiKey}
+          resetForm={resetApiKeyForm}
+          editApiKey={editApiKey}
+          deactivateApiKey={deactivateApiKey}
         />
       ) : (
         <TransactionsPage
@@ -847,6 +978,98 @@ function DataBrowserPage({
           <pre>[]</pre>
         )}
       </div>
+    </section>
+  );
+}
+
+function ApiKeysPage({
+  apiKeys,
+  form,
+  setForm,
+  editingId,
+  createdPlainApiKey,
+  message,
+  saveApiKey,
+  resetForm,
+  editApiKey,
+  deactivateApiKey,
+}) {
+  function toggleDirection(direction) {
+    const next = form.allowed_directions.includes(direction)
+      ? form.allowed_directions.filter((item) => item !== direction)
+      : [...form.allowed_directions, direction];
+    setForm({ ...form, allowed_directions: next });
+  }
+
+  return (
+    <section className="api-keys-layout">
+      <form className="model-form" onSubmit={saveApiKey}>
+        <div className="section-heading">
+          <p className="panel-label">{editingId ? "Edit API Key" : "Create API Key"}</p>
+          <button type="button" onClick={resetForm}>New</button>
+        </div>
+        <div className="form-grid">
+          <label>
+            Name
+            <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required />
+          </label>
+          <label>
+            Source System
+            <input value={form.source_system} onChange={(event) => setForm({ ...form, source_system: event.target.value })} placeholder="ERP" />
+          </label>
+          <label>
+            Allowed Models
+            <input value={form.allowed_models} onChange={(event) => setForm({ ...form, allowed_models: event.target.value })} placeholder="invoice, quality_result" />
+          </label>
+          <label>
+            Expires At
+            <input type="datetime-local" value={form.expires_at} onChange={(event) => setForm({ ...form, expires_at: event.target.value })} />
+          </label>
+        </div>
+        <label>
+          Description
+          <textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} />
+        </label>
+        <div className="direction-row">
+          <label className="compact-check">
+            <input type="checkbox" checked={form.allowed_directions.includes("inbound")} onChange={() => toggleDirection("inbound")} />
+            Inbound
+          </label>
+          <label className="compact-check">
+            <input type="checkbox" checked={form.allowed_directions.includes("outbound")} onChange={() => toggleDirection("outbound")} />
+            Outbound
+          </label>
+          <label className="compact-check">
+            <input type="checkbox" checked={form.is_active} onChange={(event) => setForm({ ...form, is_active: event.target.checked })} />
+            Active
+          </label>
+        </div>
+        <button className="primary-button" type="submit">{editingId ? "Update API Key" : "Create API Key"}</button>
+        {createdPlainApiKey && (
+          <div className="secret-panel">
+            <p>Copy this API key now. It will not be shown again.</p>
+            <code>{createdPlainApiKey}</code>
+          </div>
+        )}
+        {message && <p className="form-message">{message}</p>}
+      </form>
+
+      <section className="model-list">
+        {apiKeys.map((apiKey) => (
+          <article className="model-item" key={apiKey.id}>
+            <div>
+              <p className="panel-label">{apiKey.key_prefix} · {apiKey.is_active ? "active" : "inactive"}</p>
+              <h2>{apiKey.name}</h2>
+              <p>{apiKey.source_system || "No source system"}</p>
+              <p>{apiKey.allowed_directions.join(", ")} · {apiKey.allowed_models?.join(", ") || "all models"}</p>
+            </div>
+            <div className="item-actions">
+              <button type="button" onClick={() => editApiKey(apiKey)}>Edit</button>
+              <button type="button" onClick={() => deactivateApiKey(apiKey.id)} disabled={!apiKey.is_active}>Deactivate</button>
+            </div>
+          </article>
+        ))}
+      </section>
     </section>
   );
 }

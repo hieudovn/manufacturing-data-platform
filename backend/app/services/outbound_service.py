@@ -7,6 +7,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.models.data_model import DataModel
+from app.services.api_key_service import AuthContext
 from app.services.data_model_service import get_data_model_by_name
 from app.services.inbound_service import validate_scalar_value
 from app.services.table_generator import (
@@ -188,7 +189,12 @@ def query_outbound_record_by_key(
     return records[0] if records else None
 
 
-def validate_outbound_model(db: Session, model_name: str, payload: dict[str, Any]) -> DataModel:
+def validate_outbound_model(
+    db: Session,
+    model_name: str,
+    payload: dict[str, Any],
+    auth_context: AuthContext,
+) -> DataModel:
     try:
         validate_identifier(model_name, "Data model name")
     except TableGenerationError as exc:
@@ -207,7 +213,10 @@ def validate_outbound_model(db: Session, model_name: str, payload: dict[str, Any
             status="failed",
             request_payload=payload,
             error_message="Outbound API for Type B data models is not supported yet",
-            source_system=model.source_system,
+            auth_type=auth_context.auth_type,
+            api_key_id=auth_context.api_key_id,
+            user_id=auth_context.user_id,
+            source_system=auth_context.source_system or model.source_system,
         )
         db.commit()
         raise ValueError("Outbound API for Type B data models is not supported yet")
@@ -224,9 +233,10 @@ def list_outbound(
     offset: int,
     include_meta: bool,
     include_raw: bool,
+    auth_context: AuthContext,
 ) -> dict[str, Any]:
     request_payload = {"path": endpoint, "query_params": query_params}
-    model = validate_outbound_model(db, model_name, request_payload)
+    model = validate_outbound_model(db, model_name, request_payload, auth_context)
     filters = {
         key: value for key, value in query_params.items() if key not in RESERVED_QUERY_PARAMS
     }
@@ -258,7 +268,10 @@ def list_outbound(
             status="success",
             request_payload=request_payload,
             response_payload={"count": len(records), "model": model.name},
-            source_system=model.source_system,
+            auth_type=auth_context.auth_type,
+            api_key_id=auth_context.api_key_id,
+            user_id=auth_context.user_id,
+            source_system=auth_context.source_system or model.source_system,
         )
         db.commit()
         return response_payload
@@ -273,7 +286,10 @@ def list_outbound(
             status="failed",
             request_payload=request_payload,
             error_message=json.dumps(exc.errors),
-            source_system=model.source_system,
+            auth_type=auth_context.auth_type,
+            api_key_id=auth_context.api_key_id,
+            user_id=auth_context.user_id,
+            source_system=auth_context.source_system or model.source_system,
         )
         db.commit()
         raise
@@ -289,7 +305,10 @@ def list_outbound(
             status="failed",
             request_payload=request_payload,
             error_message=message,
-            source_system=model.source_system,
+            auth_type=auth_context.auth_type,
+            api_key_id=auth_context.api_key_id,
+            user_id=auth_context.user_id,
+            source_system=auth_context.source_system or model.source_system,
         )
         db.commit()
         raise OutboundQueryError(message) from exc
@@ -304,9 +323,10 @@ def get_outbound_by_key(
     endpoint: str,
     include_meta: bool,
     include_raw: bool,
+    auth_context: AuthContext,
 ) -> dict[str, Any]:
     request_payload = {"path": endpoint, "query_params": query_params}
-    model = validate_outbound_model(db, model_name, request_payload)
+    model = validate_outbound_model(db, model_name, request_payload, auth_context)
 
     try:
         record = query_outbound_record_by_key(
@@ -333,7 +353,10 @@ def get_outbound_by_key(
             status="success",
             request_payload=request_payload,
             response_payload={"count": 1, "model": model.name},
-            source_system=model.source_system,
+            auth_type=auth_context.auth_type,
+            api_key_id=auth_context.api_key_id,
+            user_id=auth_context.user_id,
+            source_system=auth_context.source_system or model.source_system,
         )
         db.commit()
         return response_payload
@@ -348,7 +371,10 @@ def get_outbound_by_key(
             status="failed",
             request_payload=request_payload,
             error_message=str(exc),
-            source_system=model.source_system,
+            auth_type=auth_context.auth_type,
+            api_key_id=auth_context.api_key_id,
+            user_id=auth_context.user_id,
+            source_system=auth_context.source_system or model.source_system,
         )
         db.commit()
         raise
@@ -364,7 +390,10 @@ def get_outbound_by_key(
             status="failed",
             request_payload=request_payload,
             error_message=message,
-            source_system=model.source_system,
+            auth_type=auth_context.auth_type,
+            api_key_id=auth_context.api_key_id,
+            user_id=auth_context.user_id,
+            source_system=auth_context.source_system or model.source_system,
         )
         db.commit()
         raise OutboundQueryError(message) from exc

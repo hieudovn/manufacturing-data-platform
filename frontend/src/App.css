@@ -233,8 +233,41 @@ h2 {
   grid-template-columns: 1fr;
 }
 
-.browser-panel {
+.browser-panel,
+.api-keys-layout {
   grid-template-columns: 1fr;
+}
+
+.api-keys-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+  gap: 24px;
+  margin-top: 48px;
+  align-items: start;
+}
+
+.direction-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+}
+
+.secret-panel {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid #d8bd64;
+  border-radius: 8px;
+  background: #fff8df;
+}
+
+.secret-panel p {
+  margin: 0;
+  font-weight: 800;
+}
+
+.secret-panel code {
+  overflow-wrap: anywhere;
 }
 
 .model-form,
@@ -495,6 +528,7 @@ h2 {
   .dashboard__header,
   .panel-grid,
   .data-model-layout,
+  .api-keys-layout,
   .form-grid,
   .attribute-row,
   .browser-controls,

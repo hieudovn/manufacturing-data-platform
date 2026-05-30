@@ -8,6 +8,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.models.data_model import DataModel
+from app.services.api_key_service import AuthContext
 from app.services.data_model_service import get_data_model_by_name
 from app.services.table_generator import (
     TableGenerationError,
@@ -149,6 +150,7 @@ def receive_inbound_payload(
     model_name: str,
     payload: dict[str, Any],
     endpoint: str,
+    auth_context: AuthContext,
 ) -> dict[str, Any]:
     try:
         validate_identifier(model_name, "Data model name")
@@ -168,7 +170,10 @@ def receive_inbound_payload(
             status="failed",
             request_payload=payload,
             error_message="Inbound API is only supported for Type A data models",
-            source_system=model.source_system,
+            auth_type=auth_context.auth_type,
+            api_key_id=auth_context.api_key_id,
+            user_id=auth_context.user_id,
+            source_system=auth_context.source_system or model.source_system,
         )
         db.commit()
         raise ValueError("Inbound API is only supported for Type A data models")
@@ -194,7 +199,10 @@ def receive_inbound_payload(
                 **response_payload,
                 "record_id": str(record_id),
             },
-            source_system=model.source_system,
+            auth_type=auth_context.auth_type,
+            api_key_id=auth_context.api_key_id,
+            user_id=auth_context.user_id,
+            source_system=auth_context.source_system or model.source_system,
         )
         db.commit()
         return response_payload
@@ -209,7 +217,10 @@ def receive_inbound_payload(
             status="failed",
             request_payload=payload,
             error_message=json.dumps(exc.errors),
-            source_system=model.source_system,
+            auth_type=auth_context.auth_type,
+            api_key_id=auth_context.api_key_id,
+            user_id=auth_context.user_id,
+            source_system=auth_context.source_system or model.source_system,
         )
         db.commit()
         raise
@@ -225,7 +236,10 @@ def receive_inbound_payload(
             status="failed",
             request_payload=payload,
             error_message=message,
-            source_system=model.source_system,
+            auth_type=auth_context.auth_type,
+            api_key_id=auth_context.api_key_id,
+            user_id=auth_context.user_id,
+            source_system=auth_context.source_system or model.source_system,
         )
         db.commit()
         raise InboundInsertError(message) from exc

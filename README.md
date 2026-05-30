@@ -1,8 +1,6 @@
 # Manufacturing Data Platform
 
-Manufacturing Data Platform is a Dockerized monorepo MVP foundation for configurable manufacturing data services. The current milestone includes FastAPI, React/Vite, PostgreSQL 16, SQLAlchemy, Alembic, Docker Compose, pgAdmin, JWT authentication, user management, and data model metadata CRUD.
-
-Automatic table creation, dynamic inbound APIs, and dynamic outbound APIs are intentionally not implemented yet.
+Manufacturing Data Platform is a Dockerized monorepo MVP foundation for configurable manufacturing data services. The current milestone includes FastAPI, React/Vite, PostgreSQL 16, SQLAlchemy, Alembic, Docker Compose, pgAdmin, JWT authentication, user management, data model metadata CRUD, generated Type A storage tables, dynamic inbound/outbound APIs, transaction logging, and API key authentication for external systems.
 
 ## Architecture Summary
 
@@ -11,7 +9,7 @@ Automatic table creation, dynamic inbound APIs, and dynamic outbound APIs are in
 - `postgres`: PostgreSQL 16 database with a named Docker volume
 - `pgadmin`: Optional database administration UI on port `5050`
 
-The frontend supports login, a protected dashboard, and a basic data model management page.
+The frontend supports login, a protected dashboard, data model management, transaction viewing, data browsing, and API key management.
 
 Authentication is implemented with bcrypt password hashing and JWT bearer tokens. A default admin user is seeded on backend startup when no users exist.
 
@@ -153,7 +151,7 @@ curl -X DELETE http://localhost:8000/data-models/<id> \
   -H "Authorization: Bearer <token>"
 ```
 
-This milestone stores model metadata and creates generated PostgreSQL storage tables for Type A models. It does not expose dynamic inbound or outbound APIs yet.
+This milestone stores model metadata and creates generated PostgreSQL storage tables for Type A models.
 
 Type A models now automatically create a PostgreSQL table in the `mdp_data` schema when the model is created. For example, creating the `invoice` Type A model creates:
 
@@ -202,7 +200,7 @@ Each inbound request writes a transaction log. Successful logs include request a
 
 Current limitations:
 
-- JWT is required for inbound APIs. API keys for external systems will be added later.
+- JWT or scoped API key authentication is required for inbound APIs.
 - Insert only; no upsert behavior yet.
 - Type B inbound is not supported.
 - MQTT and schema evolution are not implemented yet.
@@ -273,9 +271,61 @@ Options:
 Current limitations:
 
 - Type A only. Type B outbound mapping will be added later.
-- JWT is required. API key access for external systems will be added later.
+- JWT or scoped API key authentication is required.
 - Equality filters only.
 - No AI semantic query layer yet.
+
+## API Key Authentication
+
+Human users authenticate with JWT. External systems can call inbound and outbound APIs with an API key:
+
+```text
+X-API-Key: <api_key>
+```
+
+API keys are managed by authenticated users. The plain key is shown only once during creation and is never stored by the backend.
+
+Create an API key:
+
+```bash
+curl -X POST http://localhost:8000/api-keys \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d "{\"name\":\"QMS integration\",\"source_system\":\"QMS\",\"allowed_directions\":[\"inbound\",\"outbound\"],\"allowed_models\":[\"quality_result\"]}"
+```
+
+Example create response includes `api_key` once:
+
+```json
+{
+  "id": "...",
+  "name": "QMS integration",
+  "key_prefix": "mdp_live_abcd123",
+  "api_key": "mdp_live_abcd123...",
+  "source_system": "QMS",
+  "allowed_directions": ["inbound", "outbound"],
+  "allowed_models": ["quality_result"],
+  "is_active": true
+}
+```
+
+Inbound with API key:
+
+```bash
+curl -X POST http://localhost:8000/inbound/quality_result \
+  -H "X-API-Key: <api_key>" \
+  -H "Content-Type: application/json" \
+  -d "{\"result_no\":\"QR-001\",\"result_value\":98.5,\"passed\":true}"
+```
+
+Outbound with API key:
+
+```bash
+curl http://localhost:8000/outbound/quality_result/QR-001 \
+  -H "X-API-Key: <api_key>"
+```
+
+API keys can be scoped by direction (`inbound`, `outbound`) and model names. Null or empty `allowed_models` means all models are allowed. Transaction logs record whether the request used JWT or API key authentication.
 
 ## Testing Auth In Swagger UI
 

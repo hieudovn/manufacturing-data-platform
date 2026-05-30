@@ -77,7 +77,7 @@ When `POST /data-models` creates a Type A model, the response includes `generate
 
 `POST /inbound/{model_name}`
 
-Requires a valid JWT for an active user.
+Requires either a valid JWT for an active user or a scoped API key with `inbound` access.
 
 Behavior:
 
@@ -115,14 +115,14 @@ Response:
 Current limitations:
 
 - Insert only; no upsert yet.
-- JWT is required. API key access for external systems will be added later.
+- JWT or scoped API key authentication is required.
 - Type B inbound, MQTT, and schema evolution are not implemented yet.
 
 ## Dynamic Outbound
 
 `GET /outbound/{model_name}`
 
-Requires a valid JWT for an active user.
+Requires either a valid JWT for an active user or a scoped API key with `outbound` access.
 
 Behavior:
 
@@ -175,7 +175,7 @@ By-key response:
 
 Security rules:
 
-- JWT is required.
+- JWT or scoped API key authentication is required.
 - Users cannot submit SQL.
 - Users cannot choose table names directly.
 - Table names are derived only from active data model metadata.
@@ -185,9 +185,56 @@ Security rules:
 Current limitations:
 
 - Type A only. Type B outbound query mapping will be added later.
-- API key access for external systems will be added later.
+- JWT or API key authentication is supported.
 - Equality filters only.
 - AI semantic query layer is not implemented yet.
+
+## API Keys
+
+Human users use JWT bearer tokens. External systems can call inbound and outbound APIs with:
+
+```text
+X-API-Key: <api_key>
+```
+
+API key management endpoints require JWT:
+
+- `POST /api-keys`
+- `GET /api-keys`
+- `GET /api-keys/{id}`
+- `PUT /api-keys/{id}`
+- `DELETE /api-keys/{id}`
+
+API keys support:
+
+- `allowed_directions`: `inbound`, `outbound`
+- `allowed_models`: optional list of model names; null or empty allows all models
+- `source_system`
+- `expires_at`
+- `is_active`
+
+Security rules:
+
+- Plain API keys are returned only once on create.
+- Plain API keys are never stored.
+- API responses never expose `hashed_key`.
+- `DELETE /api-keys/{id}` deactivates the key.
+
+Example inbound request:
+
+```bash
+curl -X POST http://localhost:8000/inbound/quality_result \
+  -H "X-API-Key: <api_key>" \
+  -H "Content-Type: application/json" \
+  -d "{\"result_no\":\"QR-001\",\"result_value\":98.5,\"passed\":true}"
+```
+
+Example outbound request:
+
+```bash
+curl http://localhost:8000/outbound/quality_result/QR-001 \
+  -H "X-API-Key: <api_key>"
+```
 
 ## Transactions
 

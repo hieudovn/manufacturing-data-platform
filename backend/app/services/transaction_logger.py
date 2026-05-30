@@ -18,6 +18,9 @@ def log_transaction(
     request_payload: dict[str, Any] | list[Any] | None = None,
     response_payload: dict[str, Any] | list[Any] | None = None,
     error_message: str | None = None,
+    auth_type: str | None = None,
+    api_key_id: uuid.UUID | None = None,
+    user_id: uuid.UUID | None = None,
     source_system: str | None = None,
 ) -> Transaction:
     transaction = Transaction(
@@ -29,6 +32,9 @@ def log_transaction(
         request_payload=request_payload,
         response_payload=response_payload,
         error_message=error_message,
+        auth_type=auth_type,
+        api_key_id=api_key_id,
+        user_id=user_id,
         source_system=source_system,
     )
     db.add(transaction)

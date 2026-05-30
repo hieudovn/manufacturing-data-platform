@@ -4,6 +4,7 @@ from collections.abc import AsyncGenerator
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.api_keys import router as api_keys_router
 from app.api.auth import router as auth_router
 from app.api.data_models import router as data_models_router
 from app.api.health import router as health_router
@@ -42,6 +43,7 @@ app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(data_models_router)
+app.include_router(api_keys_router)
 app.include_router(inbound_router)
 app.include_router(outbound_router)
 app.include_router(transactions_router)

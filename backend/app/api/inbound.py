@@ -3,9 +3,10 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Body, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import get_request_auth_context
 from app.db.session import get_db
 from app.schemas.transaction import InboundResponse
+from app.services.api_key_service import ApiKeyScopeError, AuthContext, enforce_api_key_scope
 from app.services.inbound_service import (
     InboundInsertError,
     InboundValidationError,
@@ -16,7 +17,6 @@ from app.services.inbound_service import (
 router = APIRouter(
     prefix="/inbound",
     tags=["inbound"],
-    dependencies=[Depends(get_current_user)],
 )
 
 
@@ -25,15 +25,20 @@ def receive_inbound_data(
     model_name: str,
     payload: Annotated[Any, Body()],
     db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_request_auth_context)],
 ) -> dict[str, Any]:
     endpoint = f"/inbound/{model_name}"
     try:
+        enforce_api_key_scope(auth_context, direction="inbound", model_name=model_name)
         return receive_inbound_payload(
             db,
             model_name=model_name,
             payload=payload,
             endpoint=endpoint,
+            auth_context=auth_context,
         )
+    except ApiKeyScopeError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except ValueError as exc:

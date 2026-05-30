@@ -39,10 +39,20 @@ class Transaction(Base):
         nullable=True,
     )
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    auth_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    api_key_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("api_keys.id"),
+        nullable=True,
+    )
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("users.id"),
+        nullable=True,
+    )
     source_system: Mapped[str | None] = mapped_column(String(150), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         nullable=False,
     )
-

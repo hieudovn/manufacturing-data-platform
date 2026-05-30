@@ -6,19 +6,21 @@ This milestone establishes a clean, Dockerized project foundation for the Manufa
 
 ### Frontend
 
-The frontend is a React application built with Vite. It runs on port `3000` and provides login, a protected dashboard, and data model management screens.
+The frontend is a React application built with Vite. It runs on port `3000` and provides login, a protected dashboard, data model management, data browsing, transaction viewing, and API key management screens.
 
 ### Backend
 
 The backend is a Python FastAPI service. It runs on port `8000`, exposes OpenAPI documentation at `/docs`, configures local-development CORS, and includes a SQLAlchemy database connection foundation.
 
-The backend also provides JWT authentication and basic user management. Passwords are hashed with bcrypt and stored in the `users` table.
+The backend also provides JWT authentication, API key authentication for external systems, and basic user management. Passwords are hashed with bcrypt and stored in the `users` table. API keys are hashed before storage and the plain key is returned only once when created.
 
 Data model management stores business object metadata in the `data_models` table. Type A models also create generated PostgreSQL storage tables in the `mdp_data` schema. Type B models remain metadata-only in this milestone.
 
 Dynamic inbound REST APIs accept authenticated flat JSON payloads for active Type A models and write transaction logs for both successful and failed processing.
 
 Dynamic outbound REST APIs expose integrated Type A data through model-based endpoints without exposing raw tables or accepting user SQL.
+
+Inbound and outbound APIs accept either a valid user JWT or a scoped API key. API keys can be limited by direction and data model.
 
 ### Database
 
@@ -53,6 +55,7 @@ Implemented:
 - Dynamic inbound REST API for Type A models
 - Dynamic outbound REST API for Type A models
 - Transaction logging and transaction read APIs
+- API key management and scoped API key authentication
 - SQLAlchemy database connection setup
 - Alembic migration setup
 - React/Vite dashboard shell
@@ -64,7 +67,8 @@ Explicitly deferred:
 - Fine-grained role-based authorization
 - Generated table schema evolution
 - Generated table archival/drop policy
-- Dynamic outbound REST APIs
+- API key rotation workflows
+- External API key self-service
 - ERP and SQL Server integration
 - Time-series databases, TimescaleDB, IIoT, sensor data, and realtime telemetry
 
