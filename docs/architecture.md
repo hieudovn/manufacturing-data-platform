@@ -16,6 +16,8 @@ The backend also provides JWT authentication and basic user management. Password
 
 Data model management stores business object metadata in the `data_models` table. Type A models also create generated PostgreSQL storage tables in the `mdp_data` schema. Type B models remain metadata-only in this milestone.
 
+Dynamic inbound REST APIs accept authenticated flat JSON payloads for active Type A models and write transaction logs for both successful and failed processing.
+
 ### Database
 
 PostgreSQL 16 is the primary application database. It uses the default MVP database settings:
@@ -46,6 +48,8 @@ Implemented:
 - Default admin user seeding
 - Data model metadata CRUD APIs
 - Type A generated PostgreSQL table creation
+- Dynamic inbound REST API for Type A models
+- Transaction logging and transaction read APIs
 - SQLAlchemy database connection setup
 - Alembic migration setup
 - React/Vite dashboard shell
@@ -57,7 +61,6 @@ Explicitly deferred:
 - Fine-grained role-based authorization
 - Generated table schema evolution
 - Generated table archival/drop policy
-- Dynamic inbound REST APIs
 - Dynamic outbound REST APIs
 - ERP and SQL Server integration
 - Time-series databases, TimescaleDB, IIoT, sensor data, and realtime telemetry

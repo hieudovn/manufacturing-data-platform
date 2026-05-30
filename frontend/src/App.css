@@ -216,12 +216,20 @@ h2 {
   font-weight: 700;
 }
 
-.data-model-layout {
+.data-model-layout,
+.transactions-panel {
   display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.75fr);
   gap: 24px;
   margin-top: 48px;
   align-items: start;
+}
+
+.data-model-layout {
+  grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.75fr);
+}
+
+.transactions-panel {
+  grid-template-columns: 1fr;
 }
 
 .model-form,
@@ -355,6 +363,55 @@ h2 {
   opacity: 0.55;
 }
 
+.table-header,
+.transaction-row > button {
+  display: grid;
+  grid-template-columns: 1.2fr 0.7fr 0.7fr 1.2fr 0.7fr;
+  gap: 12px;
+  align-items: center;
+}
+
+.table-header {
+  color: #596975;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.transaction-row {
+  border: 1px solid #d6e0e7;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 18px 50px rgba(26, 42, 53, 0.08);
+}
+
+.transaction-row > button {
+  width: 100%;
+  border: 0;
+  padding: 16px;
+  color: #172026;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.transaction-meta {
+  display: grid;
+  gap: 8px;
+  padding: 0 16px 16px;
+  color: #526471;
+  overflow-wrap: anywhere;
+}
+
+.transaction-row pre {
+  margin: 0;
+  padding: 16px;
+  overflow: auto;
+  border-top: 1px solid #d6e0e7;
+  color: #172026;
+  background: #f8fbfd;
+}
+
 @media (max-width: 720px) {
   .auth-page,
   .dashboard {
@@ -366,7 +423,9 @@ h2 {
   .panel-grid,
   .data-model-layout,
   .form-grid,
-  .attribute-row {
+  .attribute-row,
+  .table-header,
+  .transaction-row > button {
     grid-template-columns: 1fr;
   }
 

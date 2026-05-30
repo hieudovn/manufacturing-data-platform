@@ -163,6 +163,50 @@ mdp_data.dm_invoice
 
 Type B models store metadata only and do not generate new tables. Updating a model does not alter an already generated table in this milestone, and deactivating a model does not drop the generated table.
 
+## Dynamic Inbound API
+
+Type A models accept authenticated flat JSON payloads at:
+
+```text
+POST /inbound/{model_name}
+```
+
+Example for `quality_result`:
+
+```bash
+curl -X POST http://localhost:8000/inbound/quality_result \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d "{\"result_no\":\"QR-001\",\"item_code\":\"ITEM-1001\",\"batch_no\":\"BATCH-2026-001\",\"inspection_date\":\"2026-05-30\",\"result_value\":98.5,\"passed\":true}"
+```
+
+Example response:
+
+```json
+{
+  "status": "success",
+  "model": "quality_result",
+  "record_id": "00000000-0000-0000-0000-000000000000",
+  "message": "Data received successfully"
+}
+```
+
+Inbound validation uses the active Type A data model attributes:
+
+- Required attributes must be present and non-null.
+- Unknown fields are ignored for mapped table columns.
+- Unknown fields remain preserved in `raw_payload`.
+- Supported data types: `text`, `integer`, `float`, `boolean`, `date`, `datetime`, `json`.
+
+Each inbound request writes a transaction log. Successful logs include request and response payloads. Failed validation or insert attempts write failed logs when the data model is found.
+
+Current limitations:
+
+- JWT is required for inbound APIs. API keys for external systems will be added later.
+- Insert only; no upsert behavior yet.
+- Type B inbound is not supported.
+- Outbound APIs, MQTT, and schema evolution are not implemented yet.
+
 ## Testing Auth In Swagger UI
 
 1. Open http://localhost:8000/docs.

@@ -1,0 +1,50 @@
+from typing import Annotated, Any
+
+from fastapi import APIRouter, Body, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+
+from app.api.deps import get_current_user
+from app.db.session import get_db
+from app.schemas.transaction import InboundResponse
+from app.services.inbound_service import (
+    InboundInsertError,
+    InboundValidationError,
+    receive_inbound_payload,
+)
+
+
+router = APIRouter(
+    prefix="/inbound",
+    tags=["inbound"],
+    dependencies=[Depends(get_current_user)],
+)
+
+
+@router.post("/{model_name}", response_model=InboundResponse)
+def receive_inbound_data(
+    model_name: str,
+    payload: Annotated[Any, Body()],
+    db: Annotated[Session, Depends(get_db)],
+) -> dict[str, Any]:
+    endpoint = f"/inbound/{model_name}"
+    try:
+        return receive_inbound_payload(
+            db,
+            model_name=model_name,
+            payload=payload,
+            endpoint=endpoint,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except InboundValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=exc.errors,
+        ) from exc
+    except InboundInsertError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(exc),
+        ) from exc

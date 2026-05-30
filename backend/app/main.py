@@ -7,6 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.auth import router as auth_router
 from app.api.data_models import router as data_models_router
 from app.api.health import router as health_router
+from app.api.inbound import router as inbound_router
+from app.api.transactions import router as transactions_router
 from app.api.users import router as users_router
 from app.core.config import settings
 from app.db.session import SessionLocal
@@ -39,3 +41,5 @@ app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(data_models_router)
+app.include_router(inbound_router)
+app.include_router(transactions_router)

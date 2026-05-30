@@ -65,6 +65,8 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [page, setPage] = useState("dashboard");
   const [dataModels, setDataModels] = useState([]);
+  const [transactions, setTransactions] = useState([]);
+  const [expandedTransactionId, setExpandedTransactionId] = useState(null);
   const [form, setForm] = useState(emptyDataModel);
   const [editingId, setEditingId] = useState(null);
   const [modelMessage, setModelMessage] = useState("");
@@ -133,6 +135,9 @@ function App() {
     if (token && page === "data-models") {
       loadDataModels();
     }
+    if (token && page === "transactions") {
+      loadTransactions();
+    }
   }, [page, token]);
 
   async function handleLogin(event) {
@@ -180,6 +185,20 @@ function App() {
       setDataModels(await response.json());
     } catch (err) {
       setModelMessage(err instanceof Error ? err.message : "Unable to load data models");
+    }
+  }
+
+  async function loadTransactions() {
+    try {
+      const response = await fetch(`${API_BASE_URL}/transactions?limit=100`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        throw new Error("Unable to load transactions");
+      }
+      setTransactions(await response.json());
+    } catch (err) {
+      setModelMessage(err instanceof Error ? err.message : "Unable to load transactions");
     }
   }
 
@@ -313,7 +332,13 @@ function App() {
       <section className="dashboard__header">
         <div>
           <p className="eyebrow">Manufacturing Data Platform</p>
-          <h1>{page === "dashboard" ? "Operations Dashboard" : "Data Models"}</h1>
+          <h1>
+            {page === "dashboard"
+              ? "Operations Dashboard"
+              : page === "data-models"
+                ? "Data Models"
+                : "Transactions"}
+          </h1>
           <p className="summary">
             Authenticated workspace for configurable manufacturing data services.
           </p>
@@ -325,6 +350,9 @@ function App() {
           <button type="button" onClick={() => setPage("data-models")}>
             Data Models
           </button>
+          <button type="button" onClick={() => setPage("transactions")}>
+            Transactions
+          </button>
           <button className="secondary-button" type="button" onClick={handleLogout}>
             Logout
           </button>
@@ -333,7 +361,7 @@ function App() {
 
       {page === "dashboard" ? (
         <Dashboard currentUser={currentUser} health={health} />
-      ) : (
+      ) : page === "data-models" ? (
         <DataModelsPage
           dataModels={dataModels}
           form={form}
@@ -347,6 +375,12 @@ function App() {
           updateAttribute={updateAttribute}
           addAttribute={addAttribute}
           removeAttribute={removeAttribute}
+        />
+      ) : (
+        <TransactionsPage
+          transactions={transactions}
+          expandedTransactionId={expandedTransactionId}
+          setExpandedTransactionId={setExpandedTransactionId}
         />
       )}
     </main>
@@ -580,6 +614,9 @@ function DataModelsPage({
               {model.generated_table && (
                 <p className="table-name">{model.generated_table}</p>
               )}
+              {model.type === "A" && (
+                <p className="table-name">POST /inbound/{model.name}</p>
+              )}
             </div>
             <div className="item-actions">
               <button type="button" onClick={() => editModel(model)}>
@@ -596,6 +633,59 @@ function DataModelsPage({
           </article>
         ))}
       </section>
+    </section>
+  );
+}
+
+function TransactionsPage({
+  transactions,
+  expandedTransactionId,
+  setExpandedTransactionId,
+}) {
+  return (
+    <section className="transactions-panel">
+      <div className="table-header">
+        <span>Created</span>
+        <span>Direction</span>
+        <span>Protocol</span>
+        <span>Endpoint</span>
+        <span>Status</span>
+      </div>
+      {transactions.map((transaction) => (
+        <article className="transaction-row" key={transaction.id}>
+          <button
+            type="button"
+            onClick={() =>
+              setExpandedTransactionId(
+                expandedTransactionId === transaction.id ? null : transaction.id,
+              )
+            }
+          >
+            <span>{new Date(transaction.created_at).toLocaleString()}</span>
+            <span>{transaction.direction}</span>
+            <span>{transaction.protocol}</span>
+            <span>{transaction.endpoint || "-"}</span>
+            <span>{transaction.status}</span>
+          </button>
+          <div className="transaction-meta">
+            <span>{transaction.data_model_id || "-"}</span>
+            <span>{transaction.error_message || ""}</span>
+          </div>
+          {expandedTransactionId === transaction.id && (
+            <pre>
+              {JSON.stringify(
+                {
+                  request_payload: transaction.request_payload,
+                  response_payload: transaction.response_payload,
+                  error_message: transaction.error_message,
+                },
+                null,
+                2,
+              )}
+            </pre>
+          )}
+        </article>
+      ))}
     </section>
   );
 }
