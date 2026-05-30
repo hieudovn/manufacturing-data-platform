@@ -7,6 +7,7 @@ from app.api.deps import get_request_auth_context
 from app.db.session import get_db
 from app.services.api_key_service import ApiKeyScopeError, AuthContext, enforce_api_key_scope
 from app.services.outbound_service import (
+    OutboundConflictError,
     OutboundQueryError,
     OutboundValidationError,
     get_outbound_by_key,
@@ -59,6 +60,8 @@ def list_outbound_records(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=exc.errors,
         ) from exc
+    except OutboundConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except OutboundQueryError as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -101,6 +104,8 @@ def get_outbound_record_by_key(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=exc.errors,
         ) from exc
+    except OutboundConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except OutboundQueryError as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

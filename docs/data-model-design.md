@@ -396,7 +396,6 @@ Validation responses include a `warnings` array. Primary key configuration error
 Current limitations:
 
 - One source table per Type B model.
-- No Type B outbound API yet.
 - No Oracle connector or sync jobs yet.
 
 ## Type B Mapping UI Flow

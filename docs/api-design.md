@@ -127,11 +127,13 @@ Requires either a valid JWT for an active user or a scoped API key with `outboun
 Behavior:
 
 - Finds the active data model by `model_name`.
-- Accepts Type A models only.
+- Accepts Type A generated-table models and Type B linked models.
 - Selects only data model attribute columns by default.
 - Supports `limit`, `offset`, `include_meta`, and `include_raw`.
 - Supports simple equality filters on defined data model attributes.
 - Writes an outbound transaction log.
+- For Type B, queries the saved mapped staging table or view and returns model attribute names.
+- For Type B, `include_raw=true` returns `400` because linked models do not store raw payloads.
 
 List response:
 
@@ -139,6 +141,7 @@ List response:
 {
   "status": "success",
   "model": "quality_result",
+  "type": "A",
   "count": 2,
   "limit": 100,
   "offset": 0,
@@ -155,9 +158,48 @@ List response:
 }
 ```
 
+Type B list examples:
+
+```bash
+curl http://localhost:8000/outbound/supplier \
+  -H "Authorization: Bearer <token>"
+
+curl "http://localhost:8000/outbound/supplier?country=VN" \
+  -H "Authorization: Bearer <token>"
+
+curl http://localhost:8000/outbound/purchase_order_summary \
+  -H "Authorization: Bearer <token>"
+
+curl "http://localhost:8000/outbound/purchase_order_summary?po_status=open" \
+  -H "Authorization: Bearer <token>"
+```
+
+Type B list response:
+
+```json
+{
+  "status": "success",
+  "model": "supplier",
+  "type": "B",
+  "count": 5,
+  "limit": 100,
+  "offset": 0,
+  "data": [
+    {
+      "supplier_code": "SUP-1001",
+      "supplier_name": "ABC Industrial Supplies",
+      "country": "VN",
+      "status": "active"
+    }
+  ]
+}
+```
+
 `GET /outbound/{model_name}/{key}`
 
 Uses the data model `primary_key` attribute as the lookup column.
+
+For Type B, the primary key attribute is translated to its mapped `source_column`. If the lookup returns more than one row, the API returns `409 Conflict`.
 
 By-key response:
 
@@ -165,6 +207,7 @@ By-key response:
 {
   "status": "success",
   "model": "quality_result",
+  "type": "A",
   "key": "QR-001",
   "data": {
     "result_no": "QR-001",
@@ -173,18 +216,29 @@ By-key response:
 }
 ```
 
+Type B by-key examples:
+
+```bash
+curl http://localhost:8000/outbound/supplier/SUP-1001 \
+  -H "Authorization: Bearer <token>"
+
+curl http://localhost:8000/outbound/purchase_order_summary/PO-2026-0001 \
+  -H "Authorization: Bearer <token>"
+```
+
 Security rules:
 
 - JWT or scoped API key authentication is required.
 - Users cannot submit SQL.
 - Users cannot choose table names directly.
 - Table names are derived only from active data model metadata.
+- Type B source table/view names are derived only from saved attribute mappings.
 - Filter fields must be defined model attributes.
 - All filter values are bound SQL parameters.
 
 Current limitations:
 
-- Type A only. Type B outbound query mapping will be added later.
+- Type B outbound supports one mapped source table or view per model.
 - JWT or API key authentication is supported.
 - Equality filters only.
 - AI semantic query layer is not implemented yet.
@@ -341,7 +395,7 @@ Security rules:
 - Preview only selects from verified schema/table names.
 - `limit` defaults to `50` and is capped at `100`.
 
-The DB Browser is intended for inspecting staging data before creating Type B Linked Data Models. It does not implement Type B mapping or Type B outbound APIs.
+The DB Browser is intended for inspecting staging data before creating Type B Linked Data Models. It does not execute mappings itself; saved Type B models are queried through the outbound APIs.
 
 ## Type B Linked Data Models
 
@@ -392,4 +446,4 @@ Draft validation response:
 }
 ```
 
-Preview responses return flat rows using model attribute names. Type B outbound APIs, Oracle connector, sync jobs, and mapping UI are not implemented in this milestone.
+Preview responses return flat rows using model attribute names. Saved Type B models can also be queried through `/outbound/{model_name}` and `/outbound/{model_name}/{key}`. Oracle connector and sync jobs are not implemented in this milestone.

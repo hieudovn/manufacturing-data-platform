@@ -163,6 +163,7 @@ function App() {
   const [browserRecords, setBrowserRecords] = useState([]);
   const [browserLimit, setBrowserLimit] = useState(100);
   const [browserOffset, setBrowserOffset] = useState(0);
+  const [browserFilters, setBrowserFilters] = useState("");
   const [browserMessage, setBrowserMessage] = useState("");
   const [apiKeys, setApiKeys] = useState([]);
   const [apiKeyForm, setApiKeyForm] = useState({
@@ -343,11 +344,11 @@ function App() {
 
   async function loadBrowserModels() {
     try {
-      const response = await fetch(`${API_BASE_URL}/data-models?status=active&type=A`, {
+      const response = await fetch(`${API_BASE_URL}/data-models?status=active`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!response.ok) {
-        throw new Error("Unable to load Type A data models");
+        throw new Error("Unable to load active data models");
       }
       const models = await response.json();
       setBrowserModels(models);
@@ -366,10 +367,24 @@ function App() {
       return;
     }
     try {
-      const response = await fetch(
-        `${API_BASE_URL}/outbound/${selectedBrowserModel}?limit=${browserLimit}&offset=${browserOffset}`,
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
+      const params = new URLSearchParams({
+        limit: String(browserLimit),
+        offset: String(browserOffset),
+      });
+      for (const filter of browserFilters.split("&")) {
+        const trimmed = filter.trim();
+        if (!trimmed) {
+          continue;
+        }
+        const [field, ...rest] = trimmed.split("=");
+        const value = rest.join("=");
+        if (field && value) {
+          params.append(field.trim(), value.trim());
+        }
+      }
+      const response = await fetch(`${API_BASE_URL}/outbound/${selectedBrowserModel}?${params}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (!response.ok) {
         const detail = await response.json().catch(() => null);
         throw new Error(detail?.detail || "Unable to load records");
@@ -991,6 +1006,8 @@ function App() {
           setLimit={setBrowserLimit}
           offset={browserOffset}
           setOffset={setBrowserOffset}
+          filters={browserFilters}
+          setFilters={setBrowserFilters}
           records={browserRecords}
           message={browserMessage}
           loadRecords={loadBrowserRecords}
@@ -1930,6 +1947,8 @@ function DataBrowserPage({
   setLimit,
   offset,
   setOffset,
+  filters,
+  setFilters,
   records,
   message,
   loadRecords,
@@ -1972,15 +1991,29 @@ function DataBrowserPage({
             onChange={(event) => setOffset(Number(event.target.value))}
           />
         </label>
+        <label>
+          Filters
+          <input
+            value={filters}
+            onChange={(event) => setFilters(event.target.value)}
+            placeholder="country=VN&status=active"
+          />
+        </label>
         <button type="submit">Load Records</button>
       </form>
 
       {selected && (
         <div className="browser-endpoints">
+          <p className="table-name">Type {selected.type}</p>
           <p className="table-name">GET /outbound/{selected.name}</p>
           <p className="table-name">
             GET /outbound/{selected.name}/{selected.primary_key || "primary_key_value"}
           </p>
+          {selected.type === "B" && selected.source_schema && selected.source_table && (
+            <p className="table-name">
+              Source: {selected.source_schema}.{selected.source_table}
+            </p>
+          )}
         </div>
       )}
 

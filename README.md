@@ -213,9 +213,9 @@ To create `supplier`, select `mdp_staging.stg_jde_supplier`, generate attributes
 
 To create `purchase_order_summary`, select `mdp_staging.vw_jde_purchase_order_summary`, generate attributes, keep the purchase order summary fields, and mark `po_no` as the primary key. View nullability warnings are expected and do not block saving.
 
-In the UI, Type A models are ingested models that create generated PostgreSQL tables. Type B models are linked models that expose existing staging tables or views without creating new tables.
+In the UI, Type A models are ingested models that create generated PostgreSQL tables. Type B models are linked models that expose existing staging tables or views without creating new tables. Saved Type B models can be queried through `/outbound/{model_name}` and `/outbound/{model_name}/{key}`.
 
-Type B outbound APIs, Oracle connector, and sync jobs are still deferred.
+Oracle connector and sync jobs are still deferred.
 
 ## Dynamic Inbound API
 
@@ -263,7 +263,7 @@ Current limitations:
 
 ## Dynamic Outbound API
 
-Type A models can be queried through authenticated outbound APIs:
+Type A and Type B models can be queried through authenticated outbound APIs:
 
 ```text
 GET /outbound/{model_name}
@@ -278,6 +278,24 @@ curl http://localhost:8000/outbound/quality_result \
 
 curl http://localhost:8000/outbound/quality_result/QR-001 \
   -H "Authorization: Bearer <token>"
+
+curl http://localhost:8000/outbound/supplier \
+  -H "Authorization: Bearer <token>"
+
+curl http://localhost:8000/outbound/supplier/SUP-1001 \
+  -H "Authorization: Bearer <token>"
+
+curl "http://localhost:8000/outbound/supplier?country=VN" \
+  -H "Authorization: Bearer <token>"
+
+curl http://localhost:8000/outbound/purchase_order_summary \
+  -H "Authorization: Bearer <token>"
+
+curl http://localhost:8000/outbound/purchase_order_summary/PO-2026-0001 \
+  -H "Authorization: Bearer <token>"
+
+curl "http://localhost:8000/outbound/purchase_order_summary?po_status=open" \
+  -H "Authorization: Bearer <token>"
 ```
 
 List response shape:
@@ -286,6 +304,7 @@ List response shape:
 {
   "status": "success",
   "model": "quality_result",
+  "type": "A",
   "count": 2,
   "limit": 100,
   "offset": 0,
@@ -302,12 +321,34 @@ List response shape:
 }
 ```
 
+Type B responses use model attribute names and do not expose the source table/view in each data row:
+
+```json
+{
+  "status": "success",
+  "model": "supplier",
+  "type": "B",
+  "count": 5,
+  "limit": 100,
+  "offset": 0,
+  "data": [
+    {
+      "supplier_code": "SUP-1001",
+      "supplier_name": "ABC Industrial Supplies",
+      "country": "VN",
+      "status": "active"
+    }
+  ]
+}
+```
+
 By-key response shape:
 
 ```json
 {
   "status": "success",
   "model": "quality_result",
+  "type": "A",
   "key": "QR-001",
   "data": {
     "result_no": "QR-001",
@@ -321,12 +362,13 @@ Options:
 - `limit`: default `100`, max `500`
 - `offset`: default `0`
 - `include_meta=true`: include `id`, `created_at`, `updated_at`
-- `include_raw=true`: include `raw_payload`
-- Equality filters on model attributes, such as `?item_code=ITEM-1001&passed=true`
+- `include_raw=true`: include `raw_payload` for Type A only
+- Equality filters on model attributes, such as `?item_code=ITEM-1001&passed=true` or `?country=VN`
 
 Current limitations:
 
-- Type A only. Type B outbound mapping will be added later.
+- Type B outbound supports one mapped source table or view per model.
+- Type B `include_raw=true` returns `400` because linked models do not have `raw_payload`.
 - JWT or scoped API key authentication is required.
 - Equality filters only.
 - No AI semantic query layer yet.
@@ -436,13 +478,13 @@ Current limitations:
 - Oracle tests require the Oracle Python driver and client/network configuration.
 - SQL Server tests require `pyodbc` and a compatible ODBC driver.
 - MQTT testing currently validates metadata only.
-- No table browsing, migration, sync jobs, or Type B query mapping are implemented yet.
+- Connection records are not used for migration or sync jobs yet.
 
 ## Mock JDE Procurement Staging Data
 
 The MVP includes mock PostgreSQL staging tables in the `mdp_staging` schema. These tables simulate procurement data from Oracle JDE that has already been migrated by an external ETL or database migration tool.
 
-The real Oracle JDE connector, sync jobs, table browsing, and Type B outbound mapping are deferred to later milestones.
+The real Oracle JDE connector and sync jobs are deferred to later milestones.
 
 Simulated JDE tables:
 

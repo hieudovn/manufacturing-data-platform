@@ -18,6 +18,9 @@ from app.services.table_generator import (
     validate_identifier,
 )
 from app.services.transaction_logger import log_transaction
+from app.schemas.data_model import DataModelCreate
+from app.services.type_b_mapping_service import TypeBMappingError, validate_type_b_mapping
+from app.services.db_browser_service import serialize_value
 
 
 RESERVED_QUERY_PARAMS = {"limit", "offset", "include_meta", "include_raw"}
@@ -30,6 +33,10 @@ class OutboundValidationError(Exception):
 
 
 class OutboundQueryError(Exception):
+    pass
+
+
+class OutboundConflictError(Exception):
     pass
 
 
@@ -99,15 +106,53 @@ def selected_columns(
 
 
 def normalize_row(row: dict[str, Any]) -> dict[str, Any]:
-    normalized = dict(row)
-    if "id" in normalized and isinstance(normalized["id"], uuid.UUID):
-        normalized["id"] = str(normalized["id"])
+    normalized = {key: serialize_value(value) for key, value in row.items()}
+    for key, value in normalized.items():
+        if isinstance(value, uuid.UUID):
+            normalized[key] = str(value)
     if isinstance(normalized.get("raw_payload"), str):
         try:
             normalized["raw_payload"] = json.loads(normalized["raw_payload"])
         except json.JSONDecodeError:
             pass
     return normalized
+
+
+def saved_type_b_payload(model: DataModel) -> DataModelCreate:
+    return DataModelCreate.model_validate(
+        {
+            "name": model.name,
+            "display_name": model.display_name,
+            "type": model.type,
+            "category": model.category,
+            "description": model.description,
+            "business_definition": model.business_definition,
+            "owner_department": model.owner_department,
+            "source_system": model.source_system,
+            "primary_key": model.primary_key,
+            "attributes": model.attributes,
+            "relationships": model.relationships,
+            "refresh_policy": model.refresh_policy,
+            "sensitivity_level": model.sensitivity_level,
+            "ai_enabled": model.ai_enabled,
+            "status": model.status,
+        }
+    )
+
+
+def validate_type_b_outbound_mapping(db: Session, model: DataModel) -> dict[str, Any]:
+    try:
+        return validate_type_b_mapping(db, saved_type_b_payload(model))
+    except TypeBMappingError as exc:
+        raise OutboundValidationError(exc.errors) from exc
+
+
+def quote_table_reference(db: Session, schema_name: str, table_name: str) -> str:
+    validate_identifier(schema_name, "Schema name")
+    validate_identifier(table_name, "Table name")
+    if db.bind and db.bind.dialect.name == "postgresql":
+        return f"{quote_identifier(schema_name)}.{quote_identifier(table_name)}"
+    return quote_identifier(table_name)
 
 
 def query_outbound_records(
@@ -163,6 +208,67 @@ def query_outbound_records(
     return [normalize_row(dict(row)) for row in rows]
 
 
+def type_b_attribute_map(model: DataModel) -> dict[str, dict[str, Any]]:
+    return {attribute["name"]: attribute for attribute in model.attributes}
+
+
+def query_type_b_records(
+    db: Session,
+    *,
+    model: DataModel,
+    filters: dict[str, str],
+    limit: int,
+    offset: int,
+) -> list[dict[str, Any]]:
+    validation = validate_type_b_outbound_mapping(db, model)
+    attributes = type_b_attribute_map(model)
+    invalid_filters = sorted(set(filters).difference(attributes))
+    if invalid_filters:
+        raise OutboundValidationError(
+            [
+                {"field": field, "message": "filter is not defined on this data model"}
+                for field in invalid_filters
+            ]
+        )
+
+    source_schema = validation["source_schema"]
+    source_table = validation["source_table"]
+    table_ref = quote_table_reference(db, source_schema, source_table)
+    mapped_columns = validation["mapped_columns"]
+    select_clause = ", ".join(
+        f"{quote_identifier(column['source_column'])} AS {quote_identifier(column['attribute'])}"
+        for column in mapped_columns
+    )
+    source_column_by_attribute = {
+        column["attribute"]: column["source_column"] for column in mapped_columns
+    }
+
+    where_clauses: list[str] = []
+    params: dict[str, Any] = {"limit": limit, "offset": offset}
+    is_postgres = bool(db.bind and db.bind.dialect.name == "postgresql")
+    for index, (field, raw_value) in enumerate(filters.items()):
+        attribute = attributes[field]
+        source_column = source_column_by_attribute[field]
+        param_name = f"filter_{index}"
+        value = coerce_filter_value(attribute, raw_value)
+        where_clause = f"{quote_identifier(source_column)} = :{param_name}"
+        params[param_name] = json.dumps(value) if attribute["data_type"] == "json" else value
+        if attribute["data_type"] == "json" and is_postgres:
+            where_clause = f"{quote_identifier(source_column)} = CAST(:{param_name} AS JSONB)"
+        where_clauses.append(where_clause)
+
+    where_sql = f" WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+    order_sql = ""
+    if model.primary_key and model.primary_key in source_column_by_attribute:
+        order_sql = f" ORDER BY {quote_identifier(source_column_by_attribute[model.primary_key])}"
+    statement = text(
+        f"SELECT {select_clause} FROM {table_ref}{where_sql}{order_sql} "
+        "LIMIT :limit OFFSET :offset"
+    )
+    rows = db.execute(statement, params).mappings().all()
+    return [normalize_row(dict(row)) for row in rows]
+
+
 def query_outbound_record_by_key(
     db: Session,
     *,
@@ -189,6 +295,36 @@ def query_outbound_record_by_key(
     return records[0] if records else None
 
 
+def query_type_b_record_by_key(
+    db: Session,
+    *,
+    model: DataModel,
+    key: str,
+) -> dict[str, Any] | None:
+    if not model.primary_key:
+        raise ValueError("No primary_key configured for this data model")
+
+    attributes = type_b_attribute_map(model)
+    if model.primary_key not in attributes:
+        raise OutboundValidationError(
+            [{"field": "primary_key", "message": "primary_key must match one attribute"}]
+        )
+    primary_attribute = attributes[model.primary_key]
+    value = coerce_filter_value(primary_attribute, key)
+    records = query_type_b_records(
+        db,
+        model=model,
+        filters={model.primary_key: str(value).lower() if isinstance(value, bool) else str(value)},
+        limit=2,
+        offset=0,
+    )
+    if len(records) > 1:
+        raise OutboundConflictError(
+            "Primary key lookup returned multiple rows. Check Type B mapping uniqueness."
+        )
+    return records[0] if records else None
+
+
 def validate_outbound_model(
     db: Session,
     model_name: str,
@@ -203,23 +339,6 @@ def validate_outbound_model(
     model = get_active_data_model_by_name(db, model_name)
     if model is None:
         raise LookupError("Data model not found")
-    if model.type != "A":
-        log_transaction(
-            db,
-            direction="outbound",
-            protocol="rest",
-            data_model_id=model.id,
-            endpoint=str(payload.get("path", "")),
-            status="failed",
-            request_payload=payload,
-            error_message="Outbound API for Type B data models is not supported yet",
-            auth_type=auth_context.auth_type,
-            api_key_id=auth_context.api_key_id,
-            user_id=auth_context.user_id,
-            source_system=auth_context.source_system or model.source_system,
-        )
-        db.commit()
-        raise ValueError("Outbound API for Type B data models is not supported yet")
     return model
 
 
@@ -242,18 +361,30 @@ def list_outbound(
     }
 
     try:
-        records = query_outbound_records(
-            db,
-            model=model,
-            filters=filters,
-            limit=limit,
-            offset=offset,
-            include_meta=include_meta,
-            include_raw=include_raw,
-        )
+        if model.type == "B":
+            if include_raw:
+                raise ValueError("include_raw is only supported for Type A models.")
+            records = query_type_b_records(
+                db,
+                model=model,
+                filters=filters,
+                limit=limit,
+                offset=offset,
+            )
+        else:
+            records = query_outbound_records(
+                db,
+                model=model,
+                filters=filters,
+                limit=limit,
+                offset=offset,
+                include_meta=include_meta,
+                include_raw=include_raw,
+            )
         response_payload = {
             "status": "success",
             "model": model.name,
+            "type": model.type,
             "count": len(records),
             "limit": limit,
             "offset": offset,
@@ -267,7 +398,7 @@ def list_outbound(
             endpoint=endpoint,
             status="success",
             request_payload=request_payload,
-            response_payload={"count": len(records), "model": model.name},
+            response_payload={"count": len(records), "model": model.name, "type": model.type},
             auth_type=auth_context.auth_type,
             api_key_id=auth_context.api_key_id,
             user_id=auth_context.user_id,
@@ -286,6 +417,24 @@ def list_outbound(
             status="failed",
             request_payload=request_payload,
             error_message=json.dumps(exc.errors),
+            auth_type=auth_context.auth_type,
+            api_key_id=auth_context.api_key_id,
+            user_id=auth_context.user_id,
+            source_system=auth_context.source_system or model.source_system,
+        )
+        db.commit()
+        raise
+    except ValueError as exc:
+        db.rollback()
+        log_transaction(
+            db,
+            direction="outbound",
+            protocol="rest",
+            data_model_id=model.id,
+            endpoint=endpoint,
+            status="failed",
+            request_payload=request_payload,
+            error_message=str(exc),
             auth_type=auth_context.auth_type,
             api_key_id=auth_context.api_key_id,
             user_id=auth_context.user_id,
@@ -329,18 +478,24 @@ def get_outbound_by_key(
     model = validate_outbound_model(db, model_name, request_payload, auth_context)
 
     try:
-        record = query_outbound_record_by_key(
-            db,
-            model=model,
-            key=key,
-            include_meta=include_meta,
-            include_raw=include_raw,
-        )
+        if model.type == "B":
+            if include_raw:
+                raise ValueError("include_raw is only supported for Type A models.")
+            record = query_type_b_record_by_key(db, model=model, key=key)
+        else:
+            record = query_outbound_record_by_key(
+                db,
+                model=model,
+                key=key,
+                include_meta=include_meta,
+                include_raw=include_raw,
+            )
         if record is None:
             raise LookupError("Record not found")
         response_payload = {
             "status": "success",
             "model": model.name,
+            "type": model.type,
             "key": key,
             "data": record,
         }
@@ -352,7 +507,7 @@ def get_outbound_by_key(
             endpoint=endpoint,
             status="success",
             request_payload=request_payload,
-            response_payload={"count": 1, "model": model.name},
+            response_payload={"count": 1, "model": model.name, "type": model.type},
             auth_type=auth_context.auth_type,
             api_key_id=auth_context.api_key_id,
             user_id=auth_context.user_id,
@@ -361,6 +516,24 @@ def get_outbound_by_key(
         db.commit()
         return response_payload
     except (OutboundValidationError, ValueError, LookupError) as exc:
+        db.rollback()
+        log_transaction(
+            db,
+            direction="outbound",
+            protocol="rest",
+            data_model_id=model.id,
+            endpoint=endpoint,
+            status="failed",
+            request_payload=request_payload,
+            error_message=str(exc),
+            auth_type=auth_context.auth_type,
+            api_key_id=auth_context.api_key_id,
+            user_id=auth_context.user_id,
+            source_system=auth_context.source_system or model.source_system,
+        )
+        db.commit()
+        raise
+    except OutboundConflictError as exc:
         db.rollback()
         log_transaction(
             db,
