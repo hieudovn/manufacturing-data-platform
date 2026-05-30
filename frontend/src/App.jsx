@@ -107,6 +107,14 @@ function App() {
   const [connectionMessage, setConnectionMessage] = useState("");
   const [demoCounts, setDemoCounts] = useState(null);
   const [demoMessage, setDemoMessage] = useState("");
+  const [dbSchemas, setDbSchemas] = useState([]);
+  const [selectedDbSchema, setSelectedDbSchema] = useState("");
+  const [dbTables, setDbTables] = useState([]);
+  const [selectedDbTable, setSelectedDbTable] = useState("");
+  const [dbColumns, setDbColumns] = useState([]);
+  const [dbPreview, setDbPreview] = useState({ columns: [], rows: [] });
+  const [dbBrowserMessage, setDbBrowserMessage] = useState("");
+  const [dbBrowserLoading, setDbBrowserLoading] = useState(false);
   const [form, setForm] = useState(emptyDataModel);
   const [editingId, setEditingId] = useState(null);
   const [modelMessage, setModelMessage] = useState("");
@@ -189,6 +197,9 @@ function App() {
     }
     if (token && page === "demo-data") {
       loadDemoSummary();
+    }
+    if (token && page === "db-browser") {
+      loadDbSchemas();
     }
   }, [page, token]);
 
@@ -546,6 +557,109 @@ function App() {
     }
   }
 
+  async function loadDbSchemas() {
+    setDbBrowserLoading(true);
+    setDbBrowserMessage("");
+    try {
+      const response = await fetch(`${API_BASE_URL}/db-browser/schemas`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        throw new Error("Unable to load schemas");
+      }
+      const data = await response.json();
+      setDbSchemas(data.schemas);
+      const nextSchema = selectedDbSchema || data.schemas.find((schema) => schema === "mdp_staging") || data.schemas[0] || "";
+      setSelectedDbSchema(nextSchema);
+      if (nextSchema) {
+        await loadDbTables(nextSchema);
+      }
+    } catch (err) {
+      setDbBrowserMessage(err instanceof Error ? err.message : "Unable to load schemas");
+    } finally {
+      setDbBrowserLoading(false);
+    }
+  }
+
+  async function loadDbTables(schemaName) {
+    setDbBrowserMessage("");
+    const response = await fetch(`${API_BASE_URL}/db-browser/schemas/${schemaName}/tables`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) {
+      throw new Error("Unable to load tables");
+    }
+    const data = await response.json();
+    setDbTables(data.tables);
+    const nextTable = data.tables[0]?.table_name || "";
+    setSelectedDbTable(nextTable);
+    if (nextTable) {
+      await loadDbTableDetails(schemaName, nextTable);
+    } else {
+      setDbColumns([]);
+      setDbPreview({ columns: [], rows: [] });
+    }
+  }
+
+  async function handleDbSchemaChange(schemaName) {
+    setSelectedDbSchema(schemaName);
+    setDbBrowserLoading(true);
+    try {
+      await loadDbTables(schemaName);
+    } catch (err) {
+      setDbBrowserMessage(err instanceof Error ? err.message : "Unable to load tables");
+    } finally {
+      setDbBrowserLoading(false);
+    }
+  }
+
+  async function loadDbTableDetails(schemaName, tableName) {
+    const [columnsResponse, previewResponse] = await Promise.all([
+      fetch(`${API_BASE_URL}/db-browser/schemas/${schemaName}/tables/${tableName}/columns`, {
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+      fetch(`${API_BASE_URL}/db-browser/schemas/${schemaName}/tables/${tableName}/preview?limit=50`, {
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+    ]);
+    if (!columnsResponse.ok || !previewResponse.ok) {
+      throw new Error("Unable to load table details");
+    }
+    const columnsData = await columnsResponse.json();
+    const previewData = await previewResponse.json();
+    setDbColumns(columnsData.columns);
+    setDbPreview(previewData);
+  }
+
+  async function handleDbTableSelect(tableName) {
+    setSelectedDbTable(tableName);
+    setDbBrowserLoading(true);
+    setDbBrowserMessage("");
+    try {
+      await loadDbTableDetails(selectedDbSchema, tableName);
+    } catch (err) {
+      setDbBrowserMessage(err instanceof Error ? err.message : "Unable to load table details");
+    } finally {
+      setDbBrowserLoading(false);
+    }
+  }
+
+  async function refreshDbBrowser() {
+    setDbBrowserLoading(true);
+    setDbBrowserMessage("");
+    try {
+      if (selectedDbSchema && selectedDbTable) {
+        await loadDbTableDetails(selectedDbSchema, selectedDbTable);
+      } else {
+        await loadDbSchemas();
+      }
+    } catch (err) {
+      setDbBrowserMessage(err instanceof Error ? err.message : "Unable to refresh DB Browser");
+    } finally {
+      setDbBrowserLoading(false);
+    }
+  }
+
   function resetForm() {
     setForm({ ...emptyDataModel, attributes: [{ ...emptyAttribute }] });
     setEditingId(null);
@@ -689,7 +803,9 @@ function App() {
                       ? "Connections"
                       : page === "demo-data"
                         ? "Demo Data"
-                        : "Transactions"}
+                        : page === "db-browser"
+                          ? "DB Browser"
+                          : "Transactions"}
           </h1>
           <p className="summary">
             Authenticated workspace for configurable manufacturing data services.
@@ -713,6 +829,9 @@ function App() {
           </button>
           <button type="button" onClick={() => setPage("demo-data")}>
             Demo Data
+          </button>
+          <button type="button" onClick={() => setPage("db-browser")}>
+            DB Browser
           </button>
           <button type="button" onClick={() => setPage("transactions")}>
             Transactions
@@ -785,6 +904,20 @@ function App() {
           message={demoMessage}
           seedDemoData={seedDemoData}
           loadDemoSummary={loadDemoSummary}
+        />
+      ) : page === "db-browser" ? (
+        <DbBrowserPage
+          schemas={dbSchemas}
+          selectedSchema={selectedDbSchema}
+          tables={dbTables}
+          selectedTable={selectedDbTable}
+          columns={dbColumns}
+          preview={dbPreview}
+          message={dbBrowserMessage}
+          isLoading={dbBrowserLoading}
+          onSchemaChange={handleDbSchemaChange}
+          onTableSelect={handleDbTableSelect}
+          onRefresh={refreshDbBrowser}
         />
       ) : (
         <TransactionsPage
@@ -1452,6 +1585,123 @@ function DemoDataPage({ counts, message, seedDemoData, loadDemoSummary }) {
           </article>
         ))}
       </section>
+    </section>
+  );
+}
+
+function DbBrowserPage({
+  schemas,
+  selectedSchema,
+  tables,
+  selectedTable,
+  columns,
+  preview,
+  message,
+  isLoading,
+  onSchemaChange,
+  onTableSelect,
+  onRefresh,
+}) {
+  return (
+    <section className="db-browser-panel">
+      <div className="browser-controls">
+        <label>
+          Schema
+          <select
+            value={selectedSchema}
+            onChange={(event) => onSchemaChange(event.target.value)}
+          >
+            {schemas.map((schema) => (
+              <option key={schema} value={schema}>{schema}</option>
+            ))}
+          </select>
+        </label>
+        <button type="button" onClick={onRefresh}>
+          Refresh
+        </button>
+      </div>
+
+      {message && <p className="form-message">{message}</p>}
+      {isLoading && <p className="form-message">Loading database metadata...</p>}
+
+      <div className="db-browser-grid">
+        <section className="model-list">
+          {tables.map((table) => (
+            <article
+              className={`model-item ${selectedTable === table.table_name ? "model-item--selected" : ""}`}
+              key={table.table_name}
+            >
+              <div>
+                <p className="panel-label">{table.table_type}</p>
+                <h2>{table.table_name}</h2>
+              </div>
+              <div className="item-actions">
+                <button type="button" onClick={() => onTableSelect(table.table_name)}>
+                  Preview
+                </button>
+              </div>
+            </article>
+          ))}
+        </section>
+
+        <section className="db-browser-detail">
+          <article className="model-form">
+            <div className="section-heading">
+              <div>
+                <p className="panel-label">{selectedSchema || "-"}</p>
+                <h2>{selectedTable || "Select a table"}</h2>
+              </div>
+            </div>
+            <div className="browser-results">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Column</th>
+                    <th>Type</th>
+                    <th>Nullable</th>
+                    <th>Default</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {columns.map((column) => (
+                    <tr key={column.column_name}>
+                      <td>{column.column_name}</td>
+                      <td>{column.data_type}</td>
+                      <td>{column.is_nullable}</td>
+                      <td>{column.column_default || "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </article>
+
+          <div className="browser-results">
+            {preview.rows?.length > 0 ? (
+              <table>
+                <thead>
+                  <tr>
+                    {preview.columns.map((column) => (
+                      <th key={column}>{column}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {preview.rows.map((row, index) => (
+                    <tr key={index}>
+                      {preview.columns.map((column) => (
+                        <td key={column}>{JSON.stringify(row[column])}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <pre>[]</pre>
+            )}
+          </div>
+        </section>
+      </div>
     </section>
   );
 }

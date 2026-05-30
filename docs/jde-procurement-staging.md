@@ -49,6 +49,17 @@ SELECT * FROM mdp_staging.stg_jde_po_receipt;
 SELECT * FROM mdp_staging.stg_jde_ap_invoice;
 ```
 
+## DB Browser Checks
+
+The same staging tables can be inspected through the JWT-protected DB Browser:
+
+```text
+GET /db-browser/schemas
+GET /db-browser/schemas/mdp_staging/tables
+GET /db-browser/schemas/mdp_staging/tables/stg_jde_supplier/columns
+GET /db-browser/schemas/mdp_staging/tables/stg_jde_supplier/preview
+```
+
 ## Current Limitations
 
 - No Oracle JDE connector.

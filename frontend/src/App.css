@@ -236,7 +236,8 @@ h2 {
 .browser-panel,
 .api-keys-layout,
 .connections-layout,
-.demo-data-panel {
+.demo-data-panel,
+.db-browser-panel {
   grid-template-columns: 1fr;
 }
 
@@ -253,6 +254,28 @@ h2 {
   display: grid;
   gap: 24px;
   margin-top: 48px;
+}
+
+.db-browser-panel {
+  display: grid;
+  gap: 24px;
+  margin-top: 48px;
+}
+
+.db-browser-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.42fr) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.db-browser-detail {
+  display: grid;
+  gap: 18px;
+}
+
+.model-item--selected {
+  border-color: #19384c;
 }
 
 .direction-row {
@@ -540,6 +563,7 @@ h2 {
   .api-keys-layout,
   .connections-layout,
   .demo-data-panel,
+  .db-browser-grid,
   .form-grid,
   .attribute-row,
   .browser-controls,

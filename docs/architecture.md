@@ -26,6 +26,8 @@ The Connection Manager stores external system connection metadata for PostgreSQL
 
 The `mdp_staging` PostgreSQL schema contains mock JDE procurement staging tables for MVP demos. These tables represent data already migrated by an external ETL tool and will later support Type B linked data models.
 
+The DB Browser provides JWT-protected, read-only metadata and preview access to verified PostgreSQL schemas and tables. It is intended to help administrators inspect staging data before defining Type B Linked Data Models.
+
 ### Database
 
 PostgreSQL 16 is the primary application database. It uses the default MVP database settings:
@@ -62,6 +64,7 @@ Implemented:
 - API key management and scoped API key authentication
 - Connection metadata CRUD and basic connection testing
 - Mock JDE procurement staging tables and seed data
+- DB Table Browser for schemas, tables, columns, and preview rows
 - SQLAlchemy database connection setup
 - Alembic migration setup
 - React/Vite dashboard shell

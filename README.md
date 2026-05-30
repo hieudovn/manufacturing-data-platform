@@ -420,6 +420,35 @@ SELECT * FROM mdp_staging.stg_jde_po_receipt;
 SELECT * FROM mdp_staging.stg_jde_ap_invoice;
 ```
 
+## DB Table Browser
+
+The DB Browser lets authenticated administrators inspect PostgreSQL schemas, tables, columns, and sample rows. Its first purpose is to inspect migrated staging data before creating Type B Linked Data Models.
+
+Example endpoints:
+
+```text
+GET /db-browser/schemas
+GET /db-browser/schemas/mdp_staging/tables
+GET /db-browser/schemas/mdp_staging/tables/stg_jde_supplier/columns
+GET /db-browser/schemas/mdp_staging/tables/stg_jde_supplier/preview
+```
+
+Preview supports `limit` and `offset`:
+
+```bash
+curl "http://localhost:8000/db-browser/schemas/mdp_staging/tables/stg_jde_supplier/preview?limit=50&offset=0" \
+  -H "Authorization: Bearer <token>"
+```
+
+Security limits:
+
+- JWT authentication is required.
+- Only lowercase snake_case schema and table identifiers are accepted.
+- System schemas such as `pg_catalog`, `information_schema`, and `pg_toast` are excluded.
+- The API does not accept raw SQL.
+- Preview queries only run after schema and table existence are verified.
+- Preview `limit` is capped at `100`.
+
 ## Testing Auth In Swagger UI
 
 1. Open http://localhost:8000/docs.

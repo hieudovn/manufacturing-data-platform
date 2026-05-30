@@ -314,3 +314,31 @@ Demo staging endpoints require JWT authentication:
 ```
 
 These endpoints do not implement Oracle sync, Type B query mapping, or table browsing.
+
+## DB Browser
+
+DB Browser endpoints require JWT authentication and expose safe metadata browsing plus limited row previews:
+
+- `GET /db-browser/schemas`
+- `GET /db-browser/schemas/{schema_name}/tables`
+- `GET /db-browser/schemas/{schema_name}/tables/{table_name}/columns`
+- `GET /db-browser/schemas/{schema_name}/tables/{table_name}/preview`
+
+Example URLs:
+
+```text
+GET /db-browser/schemas
+GET /db-browser/schemas/mdp_staging/tables
+GET /db-browser/schemas/mdp_staging/tables/stg_jde_supplier/columns
+GET /db-browser/schemas/mdp_staging/tables/stg_jde_supplier/preview
+```
+
+Security rules:
+
+- Schema and table names must match `^[a-z][a-z0-9_]*$`.
+- System schemas are excluded.
+- Raw SQL is never accepted from the caller.
+- Preview only selects from verified schema/table names.
+- `limit` defaults to `50` and is capped at `100`.
+
+The DB Browser is intended for inspecting staging data before creating Type B Linked Data Models. It does not implement Type B mapping or Type B outbound APIs.
