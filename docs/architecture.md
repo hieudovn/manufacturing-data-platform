@@ -14,7 +14,7 @@ The backend is a Python FastAPI service. It runs on port `8000`, exposes OpenAPI
 
 The backend also provides JWT authentication and basic user management. Passwords are hashed with bcrypt and stored in the `users` table.
 
-Data model management stores business object metadata in the `data_models` table. Type A and Type B models are metadata-only in this milestone; generated tables and dynamic APIs are deferred.
+Data model management stores business object metadata in the `data_models` table. Type A models also create generated PostgreSQL storage tables in the `mdp_data` schema. Type B models remain metadata-only in this milestone.
 
 ### Database
 
@@ -28,7 +28,7 @@ Data is persisted in the Docker named volume `postgres_data`.
 
 ### Migration Layer
 
-Alembic manages the current `users` and `data_models` application tables. Automatic business table creation for Type A models is deferred.
+Alembic manages the current `users` and `data_models` application tables. Generated Type A storage tables are created by the application service at model creation time.
 
 ### pgAdmin
 
@@ -45,6 +45,7 @@ Implemented:
 - Basic user management APIs
 - Default admin user seeding
 - Data model metadata CRUD APIs
+- Type A generated PostgreSQL table creation
 - SQLAlchemy database connection setup
 - Alembic migration setup
 - React/Vite dashboard shell
@@ -54,7 +55,8 @@ Implemented:
 Explicitly deferred:
 
 - Fine-grained role-based authorization
-- Automatic PostgreSQL table creation
+- Generated table schema evolution
+- Generated table archival/drop policy
 - Dynamic inbound REST APIs
 - Dynamic outbound REST APIs
 - ERP and SQL Server integration

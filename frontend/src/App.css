@@ -319,6 +319,19 @@ h2 {
   overflow-wrap: anywhere;
 }
 
+.helper-text,
+.table-name {
+  margin: 0;
+  color: #526471;
+  line-height: 1.5;
+}
+
+.table-name {
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
 .model-item {
   display: grid;
   gap: 18px;

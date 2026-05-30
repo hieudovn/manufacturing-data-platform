@@ -1,5 +1,7 @@
 from fastapi.testclient import TestClient
 
+from app.services.table_generator import create_generated_table_for_model
+
 
 def type_a_payload(name: str = "invoice") -> dict:
     return {
@@ -89,6 +91,7 @@ def test_create_type_a_data_model(
     assert response.status_code == 201
     assert response.json()["name"] == "invoice"
     assert response.json()["type"] == "A"
+    assert response.json()["generated_table"] == "mdp_data.dm_invoice"
 
 
 def test_create_type_b_data_model(
@@ -100,6 +103,7 @@ def test_create_type_b_data_model(
     assert response.status_code == 201
     assert response.json()["name"] == "supplier"
     assert response.json()["type"] == "B"
+    assert response.json()["generated_table"] is None
 
 
 def test_list_data_models(client: TestClient, auth_headers: dict[str, str]) -> None:
@@ -144,6 +148,7 @@ def test_deactivate_data_model(client: TestClient, auth_headers: dict[str, str])
 
     assert response.status_code == 200
     assert response.json()["status"] == "inactive"
+    assert response.json()["generated_table"] == "mdp_data.dm_invoice"
 
 
 def test_invalid_model_name_fails(
@@ -163,6 +168,19 @@ def test_invalid_attribute_name_fails(
 ) -> None:
     payload = type_a_payload()
     payload["attributes"][0]["name"] = "InvoiceNo"
+
+    response = client.post("/data-models", headers=auth_headers, json=payload)
+
+    assert response.status_code == 422
+
+
+def test_system_column_conflict_fails(
+    client: TestClient,
+    auth_headers: dict[str, str],
+) -> None:
+    payload = type_a_payload()
+    payload["attributes"][0]["name"] = "created_at"
+    payload["primary_key"] = "created_at"
 
     response = client.post("/data-models", headers=auth_headers, json=payload)
 
@@ -198,3 +216,133 @@ def test_unauthenticated_request_fails(client: TestClient) -> None:
     response = client.get("/data-models")
 
     assert response.status_code == 401
+
+
+def test_duplicate_type_a_table_returns_clear_error(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "app.services.table_generator.generated_table_exists",
+        lambda db, model_name: True,
+    )
+
+    response = client.post("/data-models", headers=auth_headers, json=type_a_payload())
+    list_response = client.get("/data-models", headers=auth_headers)
+
+    assert response.status_code == 409
+    assert "Generated table already exists" in response.json()["detail"]
+    assert list_response.json() == []
+
+
+def test_failed_table_creation_rolls_back_metadata(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    monkeypatch,
+) -> None:
+    def fail_create(db, model):
+        raise RuntimeError("DDL failed")
+
+    monkeypatch.setattr("app.services.table_generator.create_generated_table_for_model", fail_create)
+
+    response = client.post("/data-models", headers=auth_headers, json=type_a_payload())
+    list_response = client.get("/data-models", headers=auth_headers)
+
+    assert response.status_code == 500
+    assert list_response.json() == []
+
+
+def test_update_does_not_alter_generated_table(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    monkeypatch,
+) -> None:
+    calls = {"count": 0}
+
+    def count_create(db, model):
+        calls["count"] += 1
+        return "mdp_data.dm_invoice"
+
+    monkeypatch.setattr(
+        "app.services.table_generator.create_generated_table_for_model",
+        count_create,
+    )
+    create_response = client.post("/data-models", headers=auth_headers, json=type_a_payload())
+    data_model_id = create_response.json()["id"]
+
+    update_response = client.put(
+        f"/data-models/{data_model_id}",
+        headers=auth_headers,
+        json={
+            "attributes": [
+                {
+                    "name": "invoice_no",
+                    "display_name": "Invoice Number",
+                    "data_type": "text",
+                    "required": True,
+                    "is_primary_key": True,
+                },
+                {
+                    "name": "new_metadata_only_column",
+                    "data_type": "text",
+                },
+            ]
+        },
+    )
+
+    assert update_response.status_code == 200
+    assert update_response.json()["generated_table"] == "mdp_data.dm_invoice"
+    assert calls["count"] == 1
+
+
+def test_create_generated_table_sql_has_system_and_attribute_columns() -> None:
+    class Result:
+        def scalar(self):
+            return False
+
+    class Dialect:
+        name = "postgresql"
+
+    class Bind:
+        dialect = Dialect()
+
+    class FakeSession:
+        bind = Bind()
+
+        def __init__(self):
+            self.statements = []
+
+        def execute(self, statement, params=None):
+            self.statements.append(str(statement))
+            return Result()
+
+    class Model:
+        name = "invoice"
+        attributes = [
+            {"name": "invoice_no", "data_type": "text"},
+            {"name": "quantity", "data_type": "integer"},
+            {"name": "amount", "data_type": "float"},
+            {"name": "approved", "data_type": "boolean"},
+            {"name": "invoice_date", "data_type": "date"},
+            {"name": "posted_at", "data_type": "datetime"},
+            {"name": "extra_data", "data_type": "json"},
+        ]
+
+    fake_session = FakeSession()
+
+    generated_table = create_generated_table_for_model(fake_session, Model())
+    ddl = fake_session.statements[-1]
+
+    assert generated_table == "mdp_data.dm_invoice"
+    assert '"id" UUID PRIMARY KEY' in ddl
+    assert '"raw_payload" JSONB NULL' in ddl
+    assert '"created_at" TIMESTAMP DEFAULT now()' in ddl
+    assert '"updated_at" TIMESTAMP DEFAULT now()' in ddl
+    assert '"invoice_no" TEXT' in ddl
+    assert '"quantity" INTEGER' in ddl
+    assert '"amount" DOUBLE PRECISION' in ddl
+    assert '"approved" BOOLEAN' in ddl
+    assert '"invoice_date" DATE' in ddl
+    assert '"posted_at" TIMESTAMP' in ddl
+    assert '"extra_data" JSONB' in ddl

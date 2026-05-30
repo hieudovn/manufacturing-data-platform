@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 SNAKE_CASE_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 ALLOWED_DATA_TYPES = {"text", "integer", "float", "boolean", "date", "datetime", "json"}
+SYSTEM_COLUMN_NAMES = {"id", "raw_payload", "created_at", "updated_at"}
 
 
 class DataModelAttribute(BaseModel):
@@ -58,6 +59,11 @@ class DataModelBase(BaseModel):
         attribute_names = [attribute.name for attribute in self.attributes]
         if len(attribute_names) != len(set(attribute_names)):
             raise ValueError("Attribute names must be unique")
+        conflicting_columns = sorted(set(attribute_names).intersection(SYSTEM_COLUMN_NAMES))
+        if conflicting_columns:
+            raise ValueError(
+                f"Attribute names conflict with system columns: {', '.join(conflicting_columns)}"
+            )
 
         primary_attributes = [
             attribute.name for attribute in self.attributes if attribute.is_primary_key
@@ -106,6 +112,7 @@ class DataModelUpdate(BaseModel):
 
 class DataModelRead(DataModelBase):
     id: uuid.UUID
+    generated_table: str | None = None
     created_at: datetime
     updated_at: datetime
 

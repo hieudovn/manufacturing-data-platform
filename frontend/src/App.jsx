@@ -480,6 +480,19 @@ function DataModelsPage({
           AI enabled
         </label>
 
+        <p className="helper-text">
+          {form.type === "A"
+            ? "A PostgreSQL table will be generated automatically for Type A models."
+            : "Type B models link to existing/staging tables and do not generate new tables."}
+        </p>
+
+        {form.generated_table && (
+          <label>
+            Generated Table
+            <input value={form.generated_table} readOnly />
+          </label>
+        )}
+
         <div className="section-heading">
           <p className="panel-label">Attributes</p>
           <button type="button" onClick={addAttribute}>
@@ -564,6 +577,9 @@ function DataModelsPage({
               </p>
               <h2>{model.display_name}</h2>
               <p>{model.description || model.name}</p>
+              {model.generated_table && (
+                <p className="table-name">{model.generated_table}</p>
+              )}
             </div>
             <div className="item-actions">
               <button type="button" onClick={() => editModel(model)}>

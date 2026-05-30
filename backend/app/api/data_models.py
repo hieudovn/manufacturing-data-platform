@@ -17,6 +17,7 @@ from app.services.data_model_service import (
     list_data_models,
     update_data_model,
 )
+from app.services.table_generator import TableGenerationError
 
 
 router = APIRouter(
@@ -48,7 +49,10 @@ def create_data_model_endpoint(
     db: Annotated[Session, Depends(get_db)],
 ) -> DataModel:
     ensure_unique_name(db, data_model_in.name)
-    return create_data_model(db, data_model_in)
+    try:
+        return create_data_model(db, data_model_in)
+    except TableGenerationError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
 @router.get("", response_model=list[DataModelRead])

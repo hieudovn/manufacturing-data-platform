@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 
 from app.models.data_model import DataModel
 from app.schemas.data_model import DataModelCreate, DataModelUpdate
+from app.services import table_generator
+from app.services.table_generator import TableGenerationError
 
 
 def get_data_model(db: Session, data_model_id: uuid.UUID) -> DataModel | None:
@@ -59,6 +61,7 @@ def _payload_from_model(data_model: DataModel) -> dict[str, Any]:
         "owner_department": data_model.owner_department,
         "source_system": data_model.source_system,
         "primary_key": data_model.primary_key,
+        "generated_table": data_model.generated_table,
         "attributes": data_model.attributes,
         "relationships": data_model.relationships,
         "refresh_policy": data_model.refresh_policy,
@@ -85,11 +88,30 @@ def validate_updated_data_model(
 
 
 def create_data_model(db: Session, data_model_in: DataModelCreate) -> DataModel:
-    data_model = DataModel(**_payload_from_create(data_model_in))
-    db.add(data_model)
-    db.commit()
-    db.refresh(data_model)
-    return data_model
+    payload = _payload_from_create(data_model_in)
+
+    try:
+        if data_model_in.type == "A":
+            generated_table = table_generator.get_generated_table_name(data_model_in.name)
+            if table_generator.generated_table_exists(db, data_model_in.name):
+                raise TableGenerationError(
+                    f"Generated table already exists: {generated_table}"
+                )
+            payload["generated_table"] = generated_table
+
+        data_model = DataModel(**payload)
+        db.add(data_model)
+        db.flush()
+
+        if data_model.type == "A":
+            table_generator.create_generated_table_for_model(db, data_model)
+
+        db.commit()
+        db.refresh(data_model)
+        return data_model
+    except Exception:
+        db.rollback()
+        raise
 
 
 def update_data_model(
@@ -97,7 +119,9 @@ def update_data_model(
     data_model: DataModel,
     data_model_in: DataModelUpdate,
 ) -> DataModel:
+    # TODO: Handle generated table schema evolution in a later milestone.
     update_payload = validate_updated_data_model(data_model, data_model_in)
+    update_payload.pop("generated_table", None)
     for field, value in update_payload.items():
         setattr(data_model, field, value)
 
@@ -108,6 +132,7 @@ def update_data_model(
 
 
 def deactivate_data_model(db: Session, data_model: DataModel) -> DataModel:
+    # TODO: Define generated table archival/drop policy in a later milestone.
     data_model.status = "inactive"
     db.add(data_model)
     db.commit()

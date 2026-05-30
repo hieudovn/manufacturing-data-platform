@@ -30,6 +30,7 @@ class DataModel(Base):
     owner_department: Mapped[str | None] = mapped_column(String(150), nullable=True)
     source_system: Mapped[str | None] = mapped_column(String(150), nullable=True)
     primary_key: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    generated_table: Mapped[str | None] = mapped_column(String(255), nullable=True)
     attributes: Mapped[list[dict[str, Any]]] = mapped_column(jsonb_type, nullable=False)
     relationships: Mapped[list[dict[str, Any]] | None] = mapped_column(jsonb_type, nullable=True)
     refresh_policy: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -62,4 +63,3 @@ class DataModel(Base):
         onupdate=func.now(),
         nullable=False,
     )
-

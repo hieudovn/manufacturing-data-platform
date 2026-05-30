@@ -153,7 +153,15 @@ curl -X DELETE http://localhost:8000/data-models/<id> \
   -H "Authorization: Bearer <token>"
 ```
 
-This milestone stores model metadata only. It does not create physical PostgreSQL model tables and does not expose dynamic inbound or outbound APIs yet.
+This milestone stores model metadata and creates generated PostgreSQL storage tables for Type A models. It does not expose dynamic inbound or outbound APIs yet.
+
+Type A models now automatically create a PostgreSQL table in the `mdp_data` schema when the model is created. For example, creating the `invoice` Type A model creates:
+
+```text
+mdp_data.dm_invoice
+```
+
+Type B models store metadata only and do not generate new tables. Updating a model does not alter an already generated table in this milestone, and deactivating a model does not drop the generated table.
 
 ## Testing Auth In Swagger UI
 

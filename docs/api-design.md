@@ -70,3 +70,5 @@ All data model endpoints require a valid JWT for an active user.
 - `ai_enabled`
 
 `DELETE /data-models/{id}` is a soft delete that sets `status` to `inactive`.
+
+When `POST /data-models` creates a Type A model, the response includes `generated_table`, such as `mdp_data.dm_invoice`. Type B model responses return `generated_table` as `null`.

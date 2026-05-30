@@ -1,12 +1,12 @@
 # Data Model Design
 
-Data models describe business objects in the Manufacturing Data Platform. This milestone stores metadata only; it does not create physical PostgreSQL business tables and does not expose dynamic inbound or outbound APIs.
+Data models describe business objects in the Manufacturing Data Platform. This milestone stores metadata and creates generated PostgreSQL storage tables for Type A models. It does not expose dynamic inbound or outbound APIs.
 
 ## Model Types
 
 ### Type A: Ingested Model
 
-Type A models describe flat JSON business data that will later be received through inbound APIs and stored in generated PostgreSQL tables.
+Type A models describe flat JSON business data that will later be received through inbound APIs and stored in generated PostgreSQL tables. When a Type A model is created, the platform creates a table in the `mdp_data` schema.
 
 Examples:
 
@@ -17,7 +17,7 @@ Examples:
 
 ### Type B: Linked Model
 
-Type B models describe data linked or mapped from existing PostgreSQL staging tables. These staging tables may later receive data from ERP or database sources such as Oracle JDE or SQL Server.
+Type B models describe data linked or mapped from existing PostgreSQL staging tables. These staging tables may later receive data from ERP or database sources such as Oracle JDE or SQL Server. Type B models do not create generated tables.
 
 Examples:
 
@@ -44,6 +44,52 @@ Each data model has a required non-empty `attributes` array. Each attribute supp
 - `synonyms`: alternate business terms for semantic search and AI use
 
 If `primary_key` is provided at the model level, it must match one of the attribute names. If an attribute has `is_primary_key=true`, the model primary key is set to that attribute.
+
+Attribute names cannot conflict with generated system columns:
+
+- `id`
+- `raw_payload`
+- `created_at`
+- `updated_at`
+
+## Generated Tables
+
+Generated tables use this naming convention:
+
+```text
+mdp_data.dm_{model_name}
+```
+
+Examples:
+
+- `invoice` -> `mdp_data.dm_invoice`
+- `purchase_order` -> `mdp_data.dm_purchase_order`
+- `quality_result` -> `mdp_data.dm_quality_result`
+
+Each generated table includes system columns:
+
+- `id UUID PRIMARY KEY`
+- `raw_payload JSONB NULL`
+- `created_at TIMESTAMP DEFAULT now()`
+- `updated_at TIMESTAMP DEFAULT now()`
+
+Each model attribute creates one data column using this mapping:
+
+| Attribute type | PostgreSQL type |
+| --- | --- |
+| `text` | `TEXT` |
+| `integer` | `INTEGER` |
+| `float` | `DOUBLE PRECISION` |
+| `boolean` | `BOOLEAN` |
+| `date` | `DATE` |
+| `datetime` | `TIMESTAMP` |
+| `json` | `JSONB` |
+
+Current limitations:
+
+- Updating a data model does not alter the generated table. Schema evolution will be handled in a later milestone.
+- Deactivating a data model does not drop the generated table. Archival and drop policy will be handled later.
+- Inbound and outbound dynamic APIs are not implemented yet.
 
 ## AI-Ready Metadata
 
