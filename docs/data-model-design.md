@@ -116,6 +116,31 @@ The metadata fields prepare the platform for later AI, semantic layer, and knowl
 - attribute `synonyms`
 - relationship metadata
 
+## Classification and Namespace Metadata
+
+Avenue MDP also stores lightweight classification fields on each data model. These fields organize the model catalog now and prepare the platform for future canonical data model management, semantic search, IIoT hierarchy integration, knowledge graph work, and AI access.
+
+Fields:
+
+- `namespace`: lowercase dot-separated path such as `avenue.demo.procurement.supplier`
+- `domain`: controlled domain such as `master_data`, `procurement`, `inventory`, `production`, `quality`, `maintenance`, `asset`, `energy`, `finance`, `sales`, `logistics`, `iiot`, or `other`
+- `entity_type`: lowercase snake_case business object type such as `supplier`, `purchase_order`, `ap_invoice`, `asset`, `quality_result`, `telemetry`, or `event`
+- `business_process`: controlled process such as `procure_to_pay`, `order_to_cash`, `plan_to_produce`, `quality_management`, `maintenance_management`, `inventory_management`, `asset_management`, `energy_management`, `iiot_monitoring`, or `other`
+- `source_layer`: `source`, `staging`, `canonical`, `curated_view`, `analytical`, `external_api`, or `generated_table`
+- `canonical_status`: `source_aligned`, `canonical`, `curated`, `experimental`, or `deprecated`
+- `site_scope`: `enterprise`, `site`, `area`, `line`, `work_center`, `asset`, or `not_applicable`
+
+Default behavior:
+
+- `category=procurement` defaults `domain` to `procurement`.
+- Type A models default `source_layer` to `generated_table`.
+- Type B models mapped to source objects beginning with `stg_` default `source_layer` to `staging`.
+- Type B models mapped to source objects beginning with `vw_` default `source_layer` to `curated_view`.
+- `canonical_status` defaults to `experimental`.
+- `site_scope` defaults to `enterprise`.
+
+These fields are metadata only in the MVP. Full UNS/MQTT, IIoT time-series storage, semantic query, knowledge graph, and AI agents are intentionally deferred to later phases.
+
 ## Example Type A: Invoice
 
 ```json

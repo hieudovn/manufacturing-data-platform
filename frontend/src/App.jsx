@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import avenueLogo from "./avenue-logo.svg";
 import "./App.css";
 
@@ -22,6 +22,14 @@ const emptyDataModel = {
   display_name: "",
   type: "A",
   category: "",
+  refresh_policy: "",
+  namespace: "",
+  domain: "",
+  entity_type: "",
+  business_process: "",
+  source_layer: "",
+  canonical_status: "experimental",
+  site_scope: "enterprise",
   description: "",
   business_definition: "",
   owner_department: "",
@@ -106,6 +114,47 @@ const ownerDepartmentOptions = [
   "Other",
 ];
 const sensitivityOptions = ["public", "internal", "confidential", "restricted"];
+const domainOptions = [
+  "",
+  "master_data",
+  "procurement",
+  "inventory",
+  "production",
+  "quality",
+  "maintenance",
+  "asset",
+  "energy",
+  "finance",
+  "sales",
+  "logistics",
+  "iiot",
+  "other",
+];
+const businessProcessOptions = [
+  "",
+  "procure_to_pay",
+  "order_to_cash",
+  "plan_to_produce",
+  "quality_management",
+  "maintenance_management",
+  "inventory_management",
+  "asset_management",
+  "energy_management",
+  "iiot_monitoring",
+  "other",
+];
+const sourceLayerOptions = [
+  "",
+  "source",
+  "staging",
+  "canonical",
+  "curated_view",
+  "analytical",
+  "external_api",
+  "generated_table",
+];
+const canonicalStatusOptions = ["", "source_aligned", "canonical", "curated", "experimental", "deprecated"];
+const siteScopeOptions = ["", "enterprise", "site", "area", "line", "work_center", "asset", "not_applicable"];
 const apiKeySourceSystems = ["", "External Test Client", "ESB", "BI", "AI Agent", "QMS", "MES", "ERP", "Other"];
 const roleOptions = [
   ["admin", "Admin"],
@@ -203,6 +252,25 @@ function getModelSource(model) {
   return "-";
 }
 
+function getModelSourceLabel(model) {
+  const source = getModelSource(model);
+  if (source === "-") {
+    return "-";
+  }
+  return model.type === "A" ? `Generated: ${source}` : `Linked: ${source}`;
+}
+
+function formatDateTime(value) {
+  return value ? new Date(value).toLocaleString() : "-";
+}
+
+function formatJson(value) {
+  if (value === null || value === undefined) {
+    return "-";
+  }
+  return JSON.stringify(value, null, 2);
+}
+
 function getModelAttributes(model) {
   return model?.attributes?.map((attribute) => attribute.name).filter(Boolean) || [];
 }
@@ -216,6 +284,15 @@ function isToday(value) {
 
 function Badge({ children, tone = "neutral" }) {
   return <span className={`badge badge--${tone}`}>{children}</span>;
+}
+
+function EllipsisText({ value, className = "" }) {
+  const displayValue = value || "-";
+  return (
+    <span className={`ellipsis-text ${className}`} title={displayValue}>
+      {displayValue}
+    </span>
+  );
 }
 
 function badgeTone(value = "") {
@@ -367,6 +444,14 @@ function compactPayload(form) {
     display_name: form.display_name,
     type: form.type,
     category: form.category || null,
+    refresh_policy: form.refresh_policy || null,
+    namespace: form.namespace || null,
+    domain: form.domain || null,
+    entity_type: form.entity_type || null,
+    business_process: form.business_process || null,
+    source_layer: form.source_layer || null,
+    canonical_status: form.canonical_status || null,
+    site_scope: form.site_scope || null,
     description: form.description || null,
     business_definition: form.business_definition || null,
     owner_department: form.owner_department || null,
@@ -436,12 +521,17 @@ function App() {
   const [viewModel, setViewModel] = useState(null);
   const [viewModelPreview, setViewModelPreview] = useState({ columns: [], rows: [] });
   const [modelFilters, setModelFilters] = useState({
+    search: "",
     type: "all",
     status: "active",
     category: "all",
+    domain: "all",
+    source_layer: "all",
+    canonical_status: "all",
     ai_enabled: "all",
   });
   const [transactionFilters, setTransactionFilters] = useState({
+    search: "",
     direction: "all",
     protocol: "all",
     status: "all",
@@ -1010,12 +1100,8 @@ function App() {
     setDbTables(data.tables);
     const nextTable = data.tables[0]?.table_name || "";
     setSelectedDbTable(nextTable);
-    if (nextTable) {
-      await loadDbTableDetails(schemaName, nextTable);
-    } else {
-      setDbColumns([]);
-      setDbPreview({ columns: [], rows: [] });
-    }
+    setDbColumns([]);
+    setDbPreview({ columns: [], rows: [] });
   }
 
   async function handleDbSchemaChange(schemaName) {
@@ -1035,7 +1121,7 @@ function App() {
       fetch(`${API_BASE_URL}/db-browser/schemas/${schemaName}/tables/${tableName}/columns`, {
         headers: { Authorization: `Bearer ${token}` },
       }),
-      fetch(`${API_BASE_URL}/db-browser/schemas/${schemaName}/tables/${tableName}/preview?limit=50`, {
+      fetch(`${API_BASE_URL}/db-browser/schemas/${schemaName}/tables/${tableName}/preview?limit=20`, {
         headers: { Authorization: `Bearer ${token}` },
       }),
     ]);
@@ -1048,12 +1134,22 @@ function App() {
     setDbPreview(previewData);
   }
 
-  async function handleDbTableSelect(tableName) {
+  function handleDbTableSelect(tableName) {
     setSelectedDbTable(tableName);
+    setDbColumns([]);
+    setDbPreview({ columns: [], rows: [] });
+    setDbBrowserMessage("");
+  }
+
+  async function loadSelectedDbTableData() {
+    if (!selectedDbSchema || !selectedDbTable) {
+      setDbBrowserMessage("Select a schema and table/view first.");
+      return;
+    }
     setDbBrowserLoading(true);
     setDbBrowserMessage("");
     try {
-      await loadDbTableDetails(selectedDbSchema, tableName);
+      await loadDbTableDetails(selectedDbSchema, selectedDbTable);
     } catch (err) {
       setDbBrowserMessage(err instanceof Error ? err.message : "Unable to load table details");
     } finally {
@@ -1066,7 +1162,7 @@ function App() {
     setDbBrowserMessage("");
     try {
       if (selectedDbSchema && selectedDbTable) {
-        await loadDbTableDetails(selectedDbSchema, selectedDbTable);
+        await loadDbTables(selectedDbSchema);
       } else {
         await loadDbSchemas();
       }
@@ -1255,12 +1351,37 @@ function App() {
     }
   }
 
+  async function activateModel(modelId) {
+    setModelMessage("");
+    try {
+      const response = await fetch(`${API_BASE_URL}/data-models/${modelId}`, {
+        method: "PUT",
+        headers: authHeaders,
+        body: JSON.stringify({ status: "active" }),
+      });
+      if (!response.ok) {
+        throw new Error("Activate failed");
+      }
+      await loadDataModels();
+      setModelMessage("Data model activated.");
+    } catch (err) {
+      setModelMessage(err instanceof Error ? err.message : "Activate failed");
+    }
+  }
+
   function startTypeBTemplate(templateName) {
     const templates = {
       supplier: {
         name: "supplier",
         display_name: "Supplier",
         category: "procurement",
+        namespace: "avenue.demo.procurement.supplier",
+        domain: "procurement",
+        entity_type: "supplier",
+        business_process: "procure_to_pay",
+        source_layer: "staging",
+        canonical_status: "canonical",
+        site_scope: "enterprise",
         source_system: "JDE ERP",
         owner_department: "Procurement",
         primary_key: "supplier_code",
@@ -1271,6 +1392,13 @@ function App() {
         name: "purchase_order_summary",
         display_name: "Purchase Order Summary",
         category: "procurement",
+        namespace: "avenue.demo.procurement.purchase_order_summary",
+        domain: "procurement",
+        entity_type: "purchase_order",
+        business_process: "procure_to_pay",
+        source_layer: "curated_view",
+        canonical_status: "curated",
+        site_scope: "enterprise",
         source_system: "JDE ERP",
         owner_department: "Procurement",
         primary_key: "po_no",
@@ -1429,6 +1557,7 @@ function App() {
             editModel={editModel}
             previewDataModel={previewDataModel}
             deactivateModel={deactivateModel}
+            activateModel={activateModel}
             openModelInBrowser={openModelInBrowser}
             updateAttribute={updateAttribute}
             addAttribute={addAttribute}
@@ -1510,6 +1639,7 @@ function App() {
             isLoading={dbBrowserLoading}
             onSchemaChange={handleDbSchemaChange}
             onTableSelect={handleDbTableSelect}
+            onLoadData={loadSelectedDbTableData}
             onRefresh={refreshDbBrowser}
           />
         ) : page === "users" ? (
@@ -1719,12 +1849,28 @@ function DataModelsPage({
   editModel,
   previewDataModel,
   deactivateModel,
+  activateModel,
   openModelInBrowser,
   updateAttribute,
   addAttribute,
   removeAttribute,
 }) {
   const filteredModels = dataModels.filter((model) => {
+    const searchText = (modelFilters.search || "").trim().toLowerCase();
+    if (
+      searchText &&
+      ![
+        model.display_name,
+        model.name,
+        model.domain,
+        model.primary_key,
+        getModelSource(model),
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(searchText))
+    ) {
+      return false;
+    }
     if (modelFilters.type !== "all" && model.type !== modelFilters.type) {
       return false;
     }
@@ -1732,6 +1878,15 @@ function DataModelsPage({
       return false;
     }
     if (modelFilters.category !== "all" && (model.category || "") !== modelFilters.category) {
+      return false;
+    }
+    if (modelFilters.domain !== "all" && (model.domain || "") !== modelFilters.domain) {
+      return false;
+    }
+    if (modelFilters.source_layer !== "all" && (model.source_layer || "") !== modelFilters.source_layer) {
+      return false;
+    }
+    if (modelFilters.canonical_status !== "all" && (model.canonical_status || "") !== modelFilters.canonical_status) {
       return false;
     }
     if (modelFilters.ai_enabled !== "all" && String(model.ai_enabled) !== modelFilters.ai_enabled) {
@@ -1752,13 +1907,48 @@ function DataModelsPage({
             New Data Model
           </button>
         </div>
-        <div className="filter-bar">
+        <div className="filter-bar data-model-filter-bar">
+          <label className="filter-search">
+            Search
+            <input
+              value={modelFilters.search || ""}
+              onChange={(event) => setModelFilters({ ...modelFilters, search: event.target.value })}
+              placeholder="Search models"
+            />
+          </label>
           <label>
             Type
             <select value={modelFilters.type} onChange={(event) => setModelFilters({ ...modelFilters, type: event.target.value })}>
               <option value="all">All</option>
               <option value="A">Type A</option>
               <option value="B">Type B</option>
+            </select>
+          </label>
+          <label>
+            Domain
+            <select value={modelFilters.domain} onChange={(event) => setModelFilters({ ...modelFilters, domain: event.target.value })}>
+              <option value="all">All</option>
+              {domainOptions.filter(Boolean).map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Source Layer
+            <select value={modelFilters.source_layer} onChange={(event) => setModelFilters({ ...modelFilters, source_layer: event.target.value })}>
+              <option value="all">All</option>
+              {sourceLayerOptions.filter(Boolean).map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Canonical Status
+            <select value={modelFilters.canonical_status} onChange={(event) => setModelFilters({ ...modelFilters, canonical_status: event.target.value })}>
+              <option value="all">All</option>
+              {canonicalStatusOptions.filter(Boolean).map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
             </select>
           </label>
           <label>
@@ -1769,64 +1959,64 @@ function DataModelsPage({
               <option value="inactive">inactive</option>
             </select>
           </label>
-          <label>
-            Category
-            <select value={modelFilters.category} onChange={(event) => setModelFilters({ ...modelFilters, category: event.target.value })}>
-              <option value="all">All</option>
-              {categoryOptions.filter(Boolean).map((option) => (
-                <option key={option} value={option}>{option}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            AI Enabled
-            <select value={modelFilters.ai_enabled} onChange={(event) => setModelFilters({ ...modelFilters, ai_enabled: event.target.value })}>
-              <option value="all">All</option>
-              <option value="true">true</option>
-              <option value="false">false</option>
-            </select>
-          </label>
         </div>
-        <div className="browser-results">
-          <table>
+        <div className="browser-results data-model-table-wrap">
+          <table className="compact-table data-model-table">
+            <colgroup>
+              <col className="col-actions" />
+              <col className="col-display" />
+              <col className="col-name" />
+              <col className="col-type" />
+              <col className="col-domain" />
+              <col className="col-source" />
+              <col className="col-primary" />
+              <col className="col-status" />
+              <col className="col-canonical" />
+              <col className="col-updated" />
+            </colgroup>
             <thead>
               <tr>
+                <th className="sticky-actions">Actions</th>
                 <th>Display Name</th>
                 <th>Name</th>
                 <th>Type</th>
-                <th>Category</th>
-                <th>Status</th>
+                <th>Domain</th>
                 <th>Source / Generated Storage</th>
                 <th>Primary Key</th>
-                <th>AI Enabled</th>
-                <th>Actions</th>
+                <th>Status</th>
+                <th>Canonical</th>
+                <th>Updated</th>
               </tr>
             </thead>
             <tbody>
               {filteredModels.map((model) => (
                 <tr key={model.id}>
-                  <td>{model.display_name}</td>
-                  <td>{model.name}</td>
-                  <td><Badge tone={badgeTone(model.type)}>Type {model.type}</Badge></td>
-                  <td>{model.category || "-"}</td>
-                  <td><Badge tone={badgeTone(model.status)}>{model.status}</Badge></td>
-                  <td className="table-name">{getModelSource(model)}</td>
-                  <td>{model.primary_key || "-"}</td>
-                  <td>{String(model.ai_enabled)}</td>
-                  <td>
+                  <td className="sticky-actions">
                     <div className="row-actions" aria-label={`Actions for ${model.name}`}>
                       <IconActionButton label="View" icon="eye" onClick={() => viewDataModel(model)} />
                       <IconActionButton label="Edit" icon="edit" onClick={() => editModel(model)} />
                       <IconActionButton label="Preview" icon="preview" onClick={() => previewDataModel(model)} />
-                      <IconActionButton
-                        label="Deactivate"
-                        icon="deactivate"
-                        onClick={() => deactivateModel(model.id)}
-                        disabled={model.status === "inactive"}
-                        tone="danger"
-                      />
+                      {model.status === "inactive" ? (
+                        <IconActionButton label="Activate" icon="activate" onClick={() => activateModel(model.id)} />
+                      ) : (
+                        <IconActionButton
+                          label="Deactivate"
+                          icon="deactivate"
+                          onClick={() => deactivateModel(model.id)}
+                          tone="danger"
+                        />
+                      )}
                     </div>
                   </td>
+                  <td><EllipsisText value={model.display_name} /></td>
+                  <td><EllipsisText value={model.name} className="table-name" /></td>
+                  <td><Badge tone={badgeTone(model.type)}>Type {model.type}</Badge></td>
+                  <td>{model.domain ? <Badge tone="neutral">{model.domain}</Badge> : "-"}</td>
+                  <td><EllipsisText value={getModelSourceLabel(model)} className="table-name" /></td>
+                  <td><EllipsisText value={model.primary_key || "-"} className="table-name" /></td>
+                  <td><Badge tone={badgeTone(model.status)}>{model.status}</Badge></td>
+                  <td>{model.canonical_status ? <Badge tone={badgeTone(model.canonical_status)}>{model.canonical_status}</Badge> : "-"}</td>
+                  <td>{formatDateTime(model.updated_at || model.created_at)}</td>
                 </tr>
               ))}
             </tbody>
@@ -1938,17 +2128,39 @@ function DataModelEditor({
 }) {
   return (
     <div className="model-editor">
+      <SectionCard title="Model Type" eyebrow="Model Behavior">
+        <div className="type-selector">
+          {[
+            ["A", "Type A", "Receives flat JSON and creates a physical PostgreSQL table."],
+            ["B", "Type B", "Links to an existing staging table or view."],
+          ].map(([type, label, description]) => (
+            <button
+              className={form.type === type ? "type-card type-card--active" : "type-card"}
+              key={type}
+              type="button"
+              onClick={() => {
+                setForm({
+                  ...form,
+                  type,
+                  source_layer: type === "A" ? form.source_layer || "generated_table" : form.source_layer,
+                  attributes: form.attributes.map((attribute) => ({
+                    ...attribute,
+                    source_schema: type === "B" ? attribute.source_schema || "" : "",
+                    source_table: type === "B" ? attribute.source_table || "" : "",
+                    source_column: type === "B" ? attribute.source_column || "" : "",
+                  })),
+                });
+              }}
+            >
+              <strong>{label}</strong>
+              <span>{description}</span>
+            </button>
+          ))}
+        </div>
+      </SectionCard>
+
       <SectionCard title="Basic Information" eyebrow={form.type === "B" ? "Linked Model" : "Ingested Model"}>
         <div className="form-grid">
-          <label>
-            Name
-            <input
-              value={form.name}
-              onChange={(event) => setForm({ ...form, name: event.target.value })}
-              placeholder="invoice"
-              required
-            />
-          </label>
           <label>
             Display Name
             <input
@@ -1958,94 +2170,14 @@ function DataModelEditor({
               required
             />
           </label>
-          <div className="type-selector">
-            {[
-              ["A", "Type A", "Receives flat JSON and creates a physical PostgreSQL table."],
-              ["B", "Type B", "Links to an existing staging table or view."],
-            ].map(([type, label, description]) => (
-              <button
-                className={form.type === type ? "type-card type-card--active" : "type-card"}
-                key={type}
-                type="button"
-                onClick={() => {
-                  setForm({
-                    ...form,
-                    type,
-                    attributes: form.attributes.map((attribute) => ({
-                      ...attribute,
-                      source_schema: type === "B" ? attribute.source_schema || "" : "",
-                      source_table: type === "B" ? attribute.source_table || "" : "",
-                      source_column: type === "B" ? attribute.source_column || "" : "",
-                    })),
-                  });
-                }}
-              >
-                <strong>{label}</strong>
-                <span>{description}</span>
-              </button>
-            ))}
-          </div>
           <label>
-            Category
-            <select value={form.category || ""} onChange={(event) => setForm({ ...form, category: event.target.value })}>
-              {categoryOptions.map((option) => (
-                <option key={option || "empty"} value={option}>{option || "Uncategorized"}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Owner Department
-            <select value={form.owner_department || ""} onChange={(event) => setForm({ ...form, owner_department: event.target.value })}>
-              {ownerDepartmentOptions.map((option) => (
-                <option key={option || "empty"} value={option}>{option || "Unassigned"}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Source System
-            <select value={form.source_system || ""} onChange={(event) => setForm({ ...form, source_system: event.target.value })}>
-              {sourceSystemOptions.map((option) => (
-                <option key={option || "empty"} value={option}>{option || "Unspecified"}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Sensitivity
-            <select value={form.sensitivity_level || "internal"} onChange={(event) => setForm({ ...form, sensitivity_level: event.target.value })}>
-              {sensitivityOptions.map((option) => (
-                <option key={option} value={option}>{option}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Primary Key
-            {form.type === "B" ? (
-              <select
-                value={form.primary_key || ""}
-                onChange={(event) => {
-                  const primaryKey = event.target.value;
-                  setForm({
-                    ...form,
-                    primary_key: primaryKey,
-                    attributes: form.attributes.map((attribute) => ({
-                      ...attribute,
-                      is_primary_key: attribute.name === primaryKey,
-                    })),
-                  });
-                }}
-              >
-                <option value="">Select primary key</option>
-                {form.attributes.filter((attribute) => attribute.name).map((attribute) => (
-                  <option key={attribute.name} value={attribute.name}>{attribute.name}</option>
-                ))}
-              </select>
-            ) : (
-              <input
-                value={form.primary_key || ""}
-                onChange={(event) => setForm({ ...form, primary_key: event.target.value })}
-                placeholder="invoice_no"
-              />
-            )}
+            Name
+            <input
+              value={form.name}
+              onChange={(event) => setForm({ ...form, name: event.target.value })}
+              placeholder="invoice"
+              required
+            />
           </label>
         </div>
 
@@ -2060,28 +2192,124 @@ function DataModelEditor({
             <textarea value={form.business_definition || ""} onChange={(event) => setForm({ ...form, business_definition: event.target.value })} />
           </label>
         )}
-
-        <label className="toggle-row">
-          <input
-            type="checkbox"
-            checked={form.ai_enabled}
-            onChange={(event) => setForm({ ...form, ai_enabled: event.target.checked })}
-          />
-          AI enabled
-        </label>
-
-        <p className="helper-text">
-          {form.type === "A"
-            ? "A PostgreSQL table will be generated automatically for Type A models."
-            : "Type B models do not create new tables. They expose existing staging tables or views as governed data models and APIs."}
-        </p>
       </SectionCard>
 
-      {form.generated_table && (
-        <SectionCard title="Generated Storage" eyebrow="Type A">
-          <p className="table-name">{form.generated_table}</p>
-        </SectionCard>
-      )}
+      <SectionCard title="Classification & Namespace" eyebrow="Catalog Metadata">
+        <p className="helper-text">
+          Namespace helps organize models for future data catalog, semantic search, IIoT hierarchy, and AI access.
+        </p>
+        <div className="form-grid">
+          <label>
+            Category
+            <select value={form.category || ""} onChange={(event) => setForm({ ...form, category: event.target.value })}>
+              {categoryOptions.map((option) => (
+                <option key={option || "empty"} value={option}>{option || "Uncategorized"}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Domain
+            <select value={form.domain || ""} onChange={(event) => setForm({ ...form, domain: event.target.value })}>
+              {domainOptions.map((option) => (
+                <option key={option || "empty"} value={option}>{option || "Infer from category"}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Entity Type
+            <input
+              value={form.entity_type || ""}
+              onChange={(event) => setForm({ ...form, entity_type: event.target.value })}
+              placeholder="supplier"
+            />
+          </label>
+          <label>
+            Business Process
+            <select value={form.business_process || ""} onChange={(event) => setForm({ ...form, business_process: event.target.value })}>
+              {businessProcessOptions.map((option) => (
+                <option key={option || "empty"} value={option}>{option || "Unspecified"}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Namespace
+            <input
+              value={form.namespace || ""}
+              onChange={(event) => setForm({ ...form, namespace: event.target.value })}
+              placeholder="avenue.demo.procurement.supplier"
+            />
+          </label>
+          <label>
+            Source Layer
+            <select value={form.source_layer || ""} onChange={(event) => setForm({ ...form, source_layer: event.target.value })}>
+              {sourceLayerOptions.map((option) => (
+                <option key={option || "empty"} value={option}>{option || "Infer from model/source"}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Canonical Status
+            <select value={form.canonical_status || ""} onChange={(event) => setForm({ ...form, canonical_status: event.target.value })}>
+              {canonicalStatusOptions.map((option) => (
+                <option key={option || "empty"} value={option}>{option || "Default experimental"}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Site Scope
+            <select value={form.site_scope || ""} onChange={(event) => setForm({ ...form, site_scope: event.target.value })}>
+              {siteScopeOptions.map((option) => (
+                <option key={option || "empty"} value={option}>{option || "Default enterprise"}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Ownership & Governance" eyebrow="Stewardship">
+        <div className="form-grid">
+          <label>
+            Source System
+            <select value={form.source_system || ""} onChange={(event) => setForm({ ...form, source_system: event.target.value })}>
+              {sourceSystemOptions.map((option) => (
+                <option key={option || "empty"} value={option}>{option || "Unspecified"}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Owner Department
+            <select value={form.owner_department || ""} onChange={(event) => setForm({ ...form, owner_department: event.target.value })}>
+              {ownerDepartmentOptions.map((option) => (
+                <option key={option || "empty"} value={option}>{option || "Unassigned"}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Sensitivity
+            <select value={form.sensitivity_level || "internal"} onChange={(event) => setForm({ ...form, sensitivity_level: event.target.value })}>
+              {sensitivityOptions.map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Refresh Policy
+            <input
+              value={form.refresh_policy || ""}
+              onChange={(event) => setForm({ ...form, refresh_policy: event.target.value })}
+              placeholder="manual"
+            />
+          </label>
+          <label className="toggle-row">
+            <input
+              type="checkbox"
+              checked={form.ai_enabled}
+              onChange={(event) => setForm({ ...form, ai_enabled: event.target.checked })}
+            />
+            AI enabled
+          </label>
+        </div>
+      </SectionCard>
 
       {form.type === "B" ? (
         <TypeBMappingDesigner
@@ -2094,13 +2322,27 @@ function DataModelEditor({
         />
       ) : (
         <SectionCard
-          title="Attributes"
-          eyebrow="Type A Schema"
+          title="Type A Attributes"
+          eyebrow="Generated Table Schema"
           actions={<button type="button" onClick={addAttribute}>Add Attribute</button>}
         >
-          <div className="attribute-list">
+          <p className="helper-text">
+            A PostgreSQL table will be generated automatically for Type A models.
+          </p>
+          {form.generated_table && <p className="table-name">{form.generated_table}</p>}
+          <div className="form-grid compact-field-row">
+            <label>
+              Primary Key
+              <input
+                value={form.primary_key || ""}
+                onChange={(event) => setForm({ ...form, primary_key: event.target.value })}
+                placeholder="invoice_no"
+              />
+            </label>
+          </div>
+          <div className="attribute-list compact-attribute-list">
             {form.attributes.map((attribute, index) => (
-              <div className="attribute-row" key={index}>
+              <div className="attribute-row attribute-row--compact" key={index}>
                 <input
                   value={attribute.name}
                   onChange={(event) => updateAttribute(index, "name", event.target.value)}
@@ -2125,11 +2367,6 @@ function DataModelEditor({
                   <input type="checkbox" checked={attribute.is_primary_key} onChange={(event) => updateAttribute(index, "is_primary_key", event.target.checked)} />
                   PK
                 </label>
-                <textarea
-                  value={attribute.description || ""}
-                  onChange={(event) => updateAttribute(index, "description", event.target.value)}
-                  placeholder="Description"
-                />
                 <button type="button" onClick={() => removeAttribute(index)}>Remove</button>
               </div>
             ))}
@@ -2145,67 +2382,85 @@ function DataModelReadOnly({ model, preview }) {
     return <EmptyState message="Data model details are loading." />;
   }
   const sourceAttribute = model.attributes?.find((attribute) => attribute.source_schema && attribute.source_table);
-  const sourceObject = model.source_schema && model.source_table
-    ? `${model.source_schema}.${model.source_table}`
-    : sourceAttribute
-      ? `${sourceAttribute.source_schema}.${sourceAttribute.source_table}`
-      : "-";
 
   return (
     <div className="model-editor">
-      <SectionCard title={model.display_name || model.name} eyebrow="Overview">
+      <SectionCard title="Overview" eyebrow={model.display_name || model.name}>
         <div className="detail-grid">
-          <div><span>Name</span><strong>{model.name}</strong></div>
+          <div><span>Display Name</span><strong>{model.display_name || "-"}</strong></div>
+          <div><span>Name</span><strong className="table-name">{model.name}</strong></div>
           <div><span>Type</span><strong><Badge tone={badgeTone(model.type)}>Type {model.type}</Badge></strong></div>
-          <div><span>Category</span><strong>{model.category || "-"}</strong></div>
           <div><span>Status</span><strong><Badge tone={badgeTone(model.status)}>{model.status || "-"}</Badge></strong></div>
-          <div><span>Primary Key</span><strong>{model.primary_key || "-"}</strong></div>
-          <div><span>Source System</span><strong>{model.source_system || "-"}</strong></div>
-          <div><span>Owner Department</span><strong>{model.owner_department || "-"}</strong></div>
-          <div><span>Sensitivity</span><strong>{model.sensitivity_level || "-"}</strong></div>
-          <div><span>AI Enabled</span><strong>{String(model.ai_enabled)}</strong></div>
-          <div><span>Storage / Source</span><strong className="table-name">{model.type === "A" ? model.generated_table || "-" : sourceObject}</strong></div>
+          <div><span>Primary Key</span><strong className="table-name">{model.primary_key || "-"}</strong></div>
         </div>
         {model.description && <p className="helper-text">{model.description}</p>}
       </SectionCard>
 
-      <SectionCard title="API Endpoints" eyebrow="Governed Access">
+      <SectionCard title="Classification" eyebrow="Catalog Metadata">
+        <div className="detail-grid">
+          <div><span>Category</span><strong>{model.category || "-"}</strong></div>
+          <div><span>Domain</span><strong>{model.domain ? <Badge tone="neutral">{model.domain}</Badge> : "-"}</strong></div>
+          <div><span>Entity Type</span><strong>{model.entity_type || "-"}</strong></div>
+          <div><span>Business Process</span><strong>{model.business_process || "-"}</strong></div>
+          <div><span>Canonical Status</span><strong>{model.canonical_status ? <Badge tone={badgeTone(model.canonical_status)}>{model.canonical_status}</Badge> : "-"}</strong></div>
+          <div><span>Site Scope</span><strong>{model.site_scope || "-"}</strong></div>
+          <div className="detail-grid__wide"><span>Namespace</span><strong className="table-name">{model.namespace || "-"}</strong></div>
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Ownership & Governance" eyebrow="Stewardship">
+        <div className="detail-grid">
+          <div><span>Source System</span><strong>{model.source_system || "-"}</strong></div>
+          <div><span>Owner Department</span><strong>{model.owner_department || "-"}</strong></div>
+          <div><span>Sensitivity</span><strong>{model.sensitivity_level || "-"}</strong></div>
+          <div><span>Source Layer</span><strong>{model.source_layer ? <Badge tone="info">{model.source_layer}</Badge> : "-"}</strong></div>
+          <div><span>AI Enabled</span><strong>{String(model.ai_enabled)}</strong></div>
+          <div><span>Refresh Policy</span><strong>{model.refresh_policy || "-"}</strong></div>
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Storage / Source" eyebrow={model.type === "A" ? "Generated Table" : "Linked Source"}>
+        <div className="detail-grid">
+          {model.type === "A" ? (
+            <div className="detail-grid__wide"><span>Generated Table</span><strong className="table-name">{model.generated_table || "-"}</strong></div>
+          ) : (
+            <>
+              <div><span>Source Schema</span><strong className="table-name">{model.source_schema || sourceAttribute?.source_schema || "-"}</strong></div>
+              <div><span>Source Table / View</span><strong className="table-name">{model.source_table || sourceAttribute?.source_table || "-"}</strong></div>
+            </>
+          )}
+        </div>
         <div className="endpoint-grid">
           {model.type === "A" && <p className="table-name">POST /inbound/{model.name}</p>}
           <p className="table-name">GET /outbound/{model.name}</p>
           <p className="table-name">GET /outbound/{model.name}/{model.primary_key || "primary_key_value"}</p>
-          {model.type === "B" && <p className="table-name">GET /data-models/{model.id}/mapped-preview</p>}
         </div>
       </SectionCard>
 
       <SectionCard title="Attributes" eyebrow="Schema">
-        <div className="browser-results">
-          <table>
+        <div className="browser-results compact-table-wrap">
+          <table className="compact-table">
             <thead>
               <tr>
-                <th>Name</th>
+                <th>Attribute Name</th>
                 <th>Display Name</th>
                 <th>Data Type</th>
+                {model.type === "B" && <th>Source Column</th>}
                 <th>Required</th>
                 <th>Primary Key</th>
-                <th>Source Mapping</th>
-                <th>Description</th>
+                <th>Sensitivity</th>
               </tr>
             </thead>
             <tbody>
               {(model.attributes || []).map((attribute) => (
                 <tr key={attribute.name}>
-                  <td>{attribute.name}</td>
-                  <td>{attribute.display_name || "-"}</td>
+                  <td><EllipsisText value={attribute.name} className="table-name" /></td>
+                  <td><EllipsisText value={attribute.display_name || "-"} /></td>
                   <td><Badge tone="neutral">{attribute.data_type}</Badge></td>
-                  <td>{String(attribute.required)}</td>
-                  <td>{String(attribute.is_primary_key)}</td>
-                  <td className="table-name">
-                    {attribute.source_schema && attribute.source_table && attribute.source_column
-                      ? `${attribute.source_schema}.${attribute.source_table}.${attribute.source_column}`
-                      : "-"}
-                  </td>
-                  <td>{attribute.description || "-"}</td>
+                  {model.type === "B" && <td><EllipsisText value={attribute.source_column || "-"} className="table-name" /></td>}
+                  <td>{attribute.required ? "Yes" : "No"}</td>
+                  <td>{attribute.is_primary_key ? "Yes" : "No"}</td>
+                  <td>{attribute.sensitivity || "-"}</td>
                 </tr>
               ))}
             </tbody>
@@ -2213,14 +2468,14 @@ function DataModelReadOnly({ model, preview }) {
         </div>
       </SectionCard>
 
-      {model.type === "B" && (
-        <SectionCard title="Mapped Preview" eyebrow="Type B">
+      {(model.type === "B" || preview?.rows?.length > 0) && (
+        <SectionCard title={model.type === "B" ? "Mapped Preview" : "Preview"} eyebrow={model.type === "B" ? "Type B" : "Type A"}>
           <p className="helper-text">
-            Preview rows use model attribute names from the saved mapping.
+            Preview rows use governed model attribute names.
           </p>
-          <div className="browser-results">
+          <div className="browser-results compact-table-wrap">
             {preview?.rows?.length > 0 ? (
-              <table>
+              <table className="compact-table">
                 <thead>
                   <tr>
                     {preview.columns.map((column) => (
@@ -2581,6 +2836,28 @@ function TypeBMappingDesigner({
             ))}
           </select>
         </label>
+        <label>
+          Primary Key Attribute
+          <select
+            value={form.primary_key || ""}
+            onChange={(event) => {
+              const primaryKey = event.target.value;
+              setForm({
+                ...form,
+                primary_key: primaryKey,
+                attributes: form.attributes.map((attribute) => ({
+                  ...attribute,
+                  is_primary_key: attribute.name === primaryKey,
+                })),
+              });
+            }}
+          >
+            <option value="">Select primary key</option>
+            {form.attributes.filter((attribute) => attribute.name).map((attribute) => (
+              <option key={attribute.name} value={attribute.name}>{attribute.name}</option>
+            ))}
+          </select>
+        </label>
       </div>
 
       {!hasPrimaryKey && (
@@ -2607,7 +2884,6 @@ function TypeBMappingDesigner({
           <span>Source Column</span>
           <span>Primary Key</span>
           <span>Required</span>
-          <span>Description</span>
           <span>Action</span>
         </div>
         {form.attributes.map((attribute, index) => (
@@ -2645,35 +2921,26 @@ function TypeBMappingDesigner({
                 </option>
               ))}
             </select>
-            <div className="mapping-flags">
-              <label className="compact-check">
-                <input
-                  type="checkbox"
-                  checked={attribute.is_primary_key}
-                  onChange={(event) =>
-                    updateMappedAttribute(index, "is_primary_key", event.target.checked)
-                  }
-                />
-                PK
-              </label>
-              <label className="compact-check">
-                <input
-                  type="checkbox"
-                  checked={attribute.required}
-                  onChange={(event) =>
-                    updateMappedAttribute(index, "required", event.target.checked)
-                  }
-                />
-                Req
-              </label>
-            </div>
-            <textarea
-              value={attribute.description || ""}
-              onChange={(event) =>
-                updateMappedAttribute(index, "description", event.target.value)
-              }
-              placeholder="Description"
-            />
+            <label className="compact-check">
+              <input
+                type="checkbox"
+                checked={attribute.is_primary_key}
+                onChange={(event) =>
+                  updateMappedAttribute(index, "is_primary_key", event.target.checked)
+                }
+              />
+              PK
+            </label>
+            <label className="compact-check">
+              <input
+                type="checkbox"
+                checked={attribute.required}
+                onChange={(event) =>
+                  updateMappedAttribute(index, "required", event.target.checked)
+                }
+              />
+              Req
+            </label>
             <button type="button" onClick={() => removeAttribute(index)}>
               Remove
             </button>
@@ -2760,6 +3027,25 @@ function TransactionsPage({
 }) {
   const modelById = Object.fromEntries(dataModels.map((model) => [model.id, model]));
   const filteredTransactions = transactions.filter((transaction) => {
+    const modelName = modelById[transaction.data_model_id]?.name || "";
+    const searchText = (filters.search || "").trim().toLowerCase();
+    if (
+      searchText &&
+      ![
+        transaction.endpoint,
+        transaction.error_message,
+        transaction.source_system,
+        transaction.auth_type,
+        transaction.status,
+        transaction.direction,
+        modelName,
+        transaction.data_model_id,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(searchText))
+    ) {
+      return false;
+    }
     if (filters.direction !== "all" && transaction.direction !== filters.direction) {
       return false;
     }
@@ -2777,102 +3063,186 @@ function TransactionsPage({
     }
     return true;
   });
+  const successCount = filteredTransactions.filter((transaction) => transaction.status === "success").length;
+  const failedCount = filteredTransactions.filter((transaction) => transaction.status === "failed").length;
+  const inboundCount = filteredTransactions.filter((transaction) => transaction.direction === "inbound").length;
+  const outboundCount = filteredTransactions.filter((transaction) => transaction.direction === "outbound").length;
 
   return (
     <section className="transactions-panel">
-      <div className="filter-bar model-form">
-        <label>
-          Direction
-          <select value={filters.direction} onChange={(event) => setFilters({ ...filters, direction: event.target.value })}>
-            <option value="all">All</option>
-            <option value="inbound">inbound</option>
-            <option value="outbound">outbound</option>
-          </select>
-        </label>
-        <label>
-          Protocol
-          <select value={filters.protocol} onChange={(event) => setFilters({ ...filters, protocol: event.target.value })}>
-            <option value="all">All</option>
-            <option value="rest">rest</option>
-            <option value="mqtt">mqtt</option>
-          </select>
-        </label>
-        <label>
-          Status
-          <select value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}>
-            <option value="all">All</option>
-            <option value="success">success</option>
-            <option value="failed">failed</option>
-          </select>
-        </label>
-        <label>
-          Data Model
-          <select value={filters.data_model_id} onChange={(event) => setFilters({ ...filters, data_model_id: event.target.value })}>
-            <option value="all">All</option>
-            {dataModels.map((model) => (
-              <option key={model.id} value={model.id}>{model.display_name} ({model.name})</option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Auth Type
-          <select value={filters.auth_type} onChange={(event) => setFilters({ ...filters, auth_type: event.target.value })}>
-            <option value="all">All</option>
-            <option value="jwt">jwt</option>
-            <option value="api_key">api_key</option>
-          </select>
-        </label>
-      </div>
-      <div className="transaction-header">
-        <span>Created</span>
-        <span>Direction</span>
-        <span>Protocol</span>
-        <span>Endpoint</span>
-        <span>Status</span>
-        <span>Auth</span>
-        <span>Source</span>
-        <span>Model</span>
-        <span>Error</span>
-      </div>
-      {filteredTransactions.map((transaction) => (
-        <article className="transaction-row" key={transaction.id}>
-          <button
-            type="button"
-            onClick={() =>
-              setExpandedTransactionId(
-                expandedTransactionId === transaction.id ? null : transaction.id,
-              )
-            }
-          >
-            <span>{new Date(transaction.created_at).toLocaleString()}</span>
-            <span><Badge tone={badgeTone(transaction.direction)}>{transaction.direction}</Badge></span>
-            <span>{transaction.protocol}</span>
-            <span>{transaction.endpoint || "-"}</span>
-            <span><Badge tone={badgeTone(transaction.status)}>{transaction.status}</Badge></span>
-            <span>{transaction.auth_type ? <Badge tone={badgeTone(transaction.auth_type)}>{transaction.auth_type}</Badge> : "-"}</span>
-            <span>{transaction.source_system || "-"}</span>
-            <span>{modelById[transaction.data_model_id]?.name || transaction.data_model_id || "-"}</span>
-            <span>{transaction.error_message || "-"}</span>
-          </button>
-          <div className="transaction-meta">
-            <span>data_model_id: {transaction.data_model_id || "-"}</span>
-            <span>source_system: {transaction.source_system || "-"}</span>
-          </div>
-          {expandedTransactionId === transaction.id && (
-            <pre>
-              {JSON.stringify(
-                {
-                  request_payload: transaction.request_payload,
-                  response_payload: transaction.response_payload,
-                  error_message: transaction.error_message,
-                },
-                null,
-                2,
-              )}
-            </pre>
-          )}
+      <div className="transaction-summary-grid">
+        <article>
+          <span>{filteredTransactions.length}</span>
+          <small>Visible transactions</small>
         </article>
-      ))}
+        <article>
+          <span>{successCount}</span>
+          <small>Success</small>
+        </article>
+        <article>
+          <span>{failedCount}</span>
+          <small>Failed</small>
+        </article>
+        <article>
+          <span>{inboundCount}</span>
+          <small>Inbound</small>
+        </article>
+        <article>
+          <span>{outboundCount}</span>
+          <small>Outbound</small>
+        </article>
+      </div>
+
+      <SectionCard title="Filters" eyebrow="Transaction Monitoring">
+        <div className="filter-bar transaction-filter-bar">
+          <label className="filter-search">
+            Search
+            <input
+              value={filters.search || ""}
+              onChange={(event) => setFilters({ ...filters, search: event.target.value })}
+              placeholder="Endpoint, model, error, source"
+            />
+          </label>
+          <label>
+            Direction
+            <select value={filters.direction} onChange={(event) => setFilters({ ...filters, direction: event.target.value })}>
+              <option value="all">All</option>
+              <option value="inbound">inbound</option>
+              <option value="outbound">outbound</option>
+            </select>
+          </label>
+          <label>
+            Status
+            <select value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}>
+              <option value="all">All</option>
+              <option value="success">success</option>
+              <option value="failed">failed</option>
+            </select>
+          </label>
+          <label>
+            Data Model
+            <select value={filters.data_model_id} onChange={(event) => setFilters({ ...filters, data_model_id: event.target.value })}>
+              <option value="all">All</option>
+              {dataModels.map((model) => (
+                <option key={model.id} value={model.id}>{model.display_name} ({model.name})</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Auth Type
+            <select value={filters.auth_type} onChange={(event) => setFilters({ ...filters, auth_type: event.target.value })}>
+              <option value="all">All</option>
+              <option value="jwt">jwt</option>
+              <option value="api_key">api_key</option>
+            </select>
+          </label>
+          <label>
+            Protocol
+            <select value={filters.protocol} onChange={(event) => setFilters({ ...filters, protocol: event.target.value })}>
+              <option value="all">All</option>
+              <option value="rest">rest</option>
+              <option value="mqtt">mqtt</option>
+            </select>
+          </label>
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Transaction Log" eyebrow={`${filteredTransactions.length} records`}>
+        <div className="browser-results transaction-table-wrap">
+          <table className="compact-table transaction-table">
+            <colgroup>
+              <col className="col-expand" />
+              <col className="col-time" />
+              <col className="col-direction" />
+              <col className="col-endpoint" />
+              <col className="col-model" />
+              <col className="col-auth" />
+              <col className="col-source" />
+              <col className="col-status" />
+              <col className="col-error" />
+            </colgroup>
+            <thead>
+              <tr>
+                <th>Detail</th>
+                <th>Time</th>
+                <th>Direction</th>
+                <th>Endpoint</th>
+                <th>Model</th>
+                <th>Auth</th>
+                <th>Source</th>
+                <th>Status</th>
+                <th>Error</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredTransactions.map((transaction) => {
+                const isExpanded = expandedTransactionId === transaction.id;
+                const modelName = modelById[transaction.data_model_id]?.name || transaction.data_model_id || "-";
+                return (
+                  <Fragment key={transaction.id}>
+                    <tr>
+                      <td>
+                        <button
+                          className="transaction-expand-button"
+                          type="button"
+                          onClick={() => setExpandedTransactionId(isExpanded ? null : transaction.id)}
+                          title={isExpanded ? "Hide details" : "Show details"}
+                          aria-label={isExpanded ? "Hide transaction details" : "Show transaction details"}
+                        >
+                          {isExpanded ? "-" : "+"}
+                        </button>
+                      </td>
+                      <td>{formatDateTime(transaction.created_at)}</td>
+                      <td><Badge tone={badgeTone(transaction.direction)}>{transaction.direction}</Badge></td>
+                      <td><EllipsisText value={transaction.endpoint || "-"} className="table-name" /></td>
+                      <td><EllipsisText value={modelName} className="table-name" /></td>
+                      <td>{transaction.auth_type ? <Badge tone={badgeTone(transaction.auth_type)}>{transaction.auth_type}</Badge> : "-"}</td>
+                      <td><EllipsisText value={transaction.source_system || "-"} /></td>
+                      <td><Badge tone={badgeTone(transaction.status)}>{transaction.status}</Badge></td>
+                      <td><EllipsisText value={transaction.error_message || "-"} /></td>
+                    </tr>
+                    {isExpanded && (
+                      <tr className="transaction-detail-row">
+                        <td colSpan="9">
+                          <div className="transaction-detail-grid">
+                            <div>
+                              <span>Data Model ID</span>
+                              <strong className="table-name">{transaction.data_model_id || "-"}</strong>
+                            </div>
+                            <div>
+                              <span>Protocol</span>
+                              <strong>{transaction.protocol || "-"}</strong>
+                            </div>
+                            <div>
+                              <span>Source System</span>
+                              <strong>{transaction.source_system || "-"}</strong>
+                            </div>
+                          </div>
+                          <div className="payload-grid">
+                            <section>
+                              <p className="panel-label">Request Payload</p>
+                              <pre>{formatJson(transaction.request_payload)}</pre>
+                            </section>
+                            <section>
+                              <p className="panel-label">Response Payload</p>
+                              <pre>{formatJson(transaction.response_payload)}</pre>
+                            </section>
+                            <section>
+                              <p className="panel-label">Error</p>
+                              <pre>{transaction.error_message || "-"}</pre>
+                            </section>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+          {filteredTransactions.length === 0 && <EmptyState message="No transactions match the current filters." />}
+        </div>
+      </SectionCard>
     </section>
   );
 }
@@ -3393,108 +3763,139 @@ function DbBrowserPage({
   isLoading,
   onSchemaChange,
   onTableSelect,
+  onLoadData,
   onRefresh,
 }) {
+  const [activeTab, setActiveTab] = useState("columns");
+  const [showRawColumns, setShowRawColumns] = useState(false);
+  const selectedTableInfo = tables.find((table) => table.table_name === selectedTable);
+  const hiddenPreviewColumns = new Set(["raw_payload"]);
+  const visiblePreviewColumns = (preview.columns || []).filter((column) =>
+    showRawColumns ? true : !hiddenPreviewColumns.has(column),
+  );
+  const visibleColumns = columns.filter((column) =>
+    showRawColumns ? true : !hiddenPreviewColumns.has(column.column_name),
+  );
+  const oversizedColumnCount = (preview.columns || []).length - visiblePreviewColumns.length;
+
   return (
     <section className="db-browser-panel">
-      <div className="browser-controls">
+      <section className="db-browser-toolbar">
         <label>
           Schema
-          <select
-            value={selectedSchema}
-            onChange={(event) => onSchemaChange(event.target.value)}
-          >
+          <select value={selectedSchema} onChange={(event) => onSchemaChange(event.target.value)}>
             {schemas.map((schema) => (
               <option key={schema} value={schema}>{schema}</option>
             ))}
           </select>
         </label>
-        <button type="button" onClick={onRefresh}>
-          Refresh
+        <label>
+          Table / View
+          <select value={selectedTable} onChange={(event) => onTableSelect(event.target.value)}>
+            {tables.map((table) => (
+              <option key={table.table_name} value={table.table_name}>
+                {table.table_name} - {table.table_type}
+              </option>
+            ))}
+          </select>
+        </label>
+        {selectedTableInfo && <Badge tone={badgeTone(selectedTableInfo.table_type)}>{selectedTableInfo.table_type}</Badge>}
+        <label className="compact-check db-raw-toggle">
+          <input
+            type="checkbox"
+            checked={showRawColumns}
+            onChange={(event) => setShowRawColumns(event.target.checked)}
+          />
+          Show raw columns
+        </label>
+        <button type="button" onClick={onRefresh}>Refresh</button>
+        <button className="primary-button" type="button" onClick={onLoadData} disabled={!selectedSchema || !selectedTable}>
+          Load Data
         </button>
-      </div>
+      </section>
 
       {message && <p className="form-message">{message}</p>}
       {isLoading && <p className="form-message">Loading database metadata...</p>}
 
-      <div className="db-browser-grid">
-        <section className="model-list">
-          {tables.map((table) => (
-            <article
-              className={`model-item ${selectedTable === table.table_name ? "model-item--selected" : ""}`}
-              key={table.table_name}
-            >
-              <div>
-                <Badge tone={badgeTone(table.table_type)}>{table.table_type}</Badge>
-                <h2>{table.table_name}</h2>
-              </div>
-              <div className="item-actions">
-                <button type="button" onClick={() => onTableSelect(table.table_name)}>
-                  Preview
-                </button>
-              </div>
-            </article>
-          ))}
-        </section>
+      <section className="db-object-summary">
+        <div><span>Schema</span><strong className="table-name">{selectedSchema || "-"}</strong></div>
+        <div><span>Object</span><strong className="table-name">{selectedTable || "-"}</strong></div>
+        <div><span>Type</span><strong>{selectedTableInfo ? <Badge tone={badgeTone(selectedTableInfo.table_type)}>{selectedTableInfo.table_type}</Badge> : "-"}</strong></div>
+        <div><span>Columns</span><strong>{visibleColumns.length}{oversizedColumnCount > 0 ? ` shown, ${oversizedColumnCount} hidden` : ""}</strong></div>
+        <div><span>Preview Rows</span><strong>{preview.rows?.length || 0}</strong></div>
+      </section>
 
-        <section className="db-browser-detail">
-          <article className="model-form">
-            <div className="section-heading">
-              <div>
-                <p className="panel-label">{selectedSchema || "-"}</p>
-                <h2>{selectedTable || "Select a table"}</h2>
-              </div>
-            </div>
-            <div className="browser-results">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Column</th>
-                    <th>Type</th>
-                    <th>Nullable</th>
-                    <th>Default</th>
+      <section className="db-content-panel">
+        <div className="tab-bar">
+          <button
+            className={activeTab === "columns" ? "tab-button tab-button--active" : "tab-button"}
+            type="button"
+            onClick={() => setActiveTab("columns")}
+          >
+            Columns
+          </button>
+          <button
+            className={activeTab === "preview" ? "tab-button tab-button--active" : "tab-button"}
+            type="button"
+            onClick={() => setActiveTab("preview")}
+          >
+            Preview
+          </button>
+        </div>
+
+        {activeTab === "columns" ? (
+          <div className="browser-results compact-table-wrap">
+            <table className="compact-table db-metadata-table">
+              <thead>
+                <tr>
+                  <th>Column</th>
+                  <th>Type</th>
+                  <th>Nullable</th>
+                  <th>Default</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleColumns.map((column) => (
+                  <tr key={column.column_name}>
+                    <td><EllipsisText value={column.column_name} className="table-name" /></td>
+                    <td><EllipsisText value={column.data_type} /></td>
+                    <td>{column.is_nullable}</td>
+                    <td><EllipsisText value={column.column_default || "-"} /></td>
                   </tr>
-                </thead>
-                <tbody>
-                  {columns.map((column) => (
-                    <tr key={column.column_name}>
-                      <td>{column.column_name}</td>
-                      <td>{column.data_type}</td>
-                      <td>{column.is_nullable}</td>
-                      <td>{column.column_default || "-"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </article>
-
-          <div className="browser-results">
-            {preview.rows?.length > 0 ? (
-              <table>
+                ))}
+              </tbody>
+            </table>
+            {visibleColumns.length === 0 && <EmptyState message="Click Load Data to inspect columns for the selected object." />}
+          </div>
+        ) : (
+          <div className="browser-results db-preview-wrap">
+            {preview.rows?.length > 0 && visiblePreviewColumns.length > 0 ? (
+              <table className="compact-table db-preview-table">
                 <thead>
                   <tr>
-                    {preview.columns.map((column) => (
-                      <th key={column}>{column}</th>
+                    {visiblePreviewColumns.map((column) => (
+                      <th key={column} title={column}>{column}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {preview.rows.map((row, index) => (
                     <tr key={index}>
-                      {preview.columns.map((column) => (
-                        <td key={column}>{JSON.stringify(row[column])}</td>
+                      {visiblePreviewColumns.map((column) => (
+                        <td key={column}>
+                          <EllipsisText value={JSON.stringify(row[column])} />
+                        </td>
                       ))}
                     </tr>
                   ))}
                 </tbody>
               </table>
             ) : (
-              <pre>[]</pre>
+              <EmptyState message="Click Load Data to preview rows for the selected object." />
             )}
           </div>
-        </section>
-      </div>
+        )}
+      </section>
     </section>
   );
 }

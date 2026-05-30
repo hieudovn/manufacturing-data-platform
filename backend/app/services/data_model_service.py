@@ -25,6 +25,10 @@ def list_data_models(
     status: str | None = None,
     model_type: str | None = None,
     ai_enabled: bool | None = None,
+    domain: str | None = None,
+    source_layer: str | None = None,
+    canonical_status: str | None = None,
+    site_scope: str | None = None,
 ) -> list[DataModel]:
     query = select(DataModel).order_by(DataModel.created_at.desc())
     if status is not None:
@@ -33,6 +37,14 @@ def list_data_models(
         query = query.where(DataModel.type == model_type)
     if ai_enabled is not None:
         query = query.where(DataModel.ai_enabled == ai_enabled)
+    if domain is not None:
+        query = query.where(DataModel.domain == domain)
+    if source_layer is not None:
+        query = query.where(DataModel.source_layer == source_layer)
+    if canonical_status is not None:
+        query = query.where(DataModel.canonical_status == canonical_status)
+    if site_scope is not None:
+        query = query.where(DataModel.site_scope == site_scope)
     return list(db.scalars(query))
 
 
@@ -57,6 +69,13 @@ def _payload_from_model(data_model: DataModel) -> dict[str, Any]:
         "display_name": data_model.display_name,
         "type": data_model.type,
         "category": data_model.category,
+        "namespace": data_model.namespace,
+        "domain": data_model.domain,
+        "entity_type": data_model.entity_type,
+        "business_process": data_model.business_process,
+        "source_layer": data_model.source_layer,
+        "canonical_status": data_model.canonical_status,
+        "site_scope": data_model.site_scope,
         "description": data_model.description,
         "business_definition": data_model.business_definition,
         "owner_department": data_model.owner_department,

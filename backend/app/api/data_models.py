@@ -72,6 +72,10 @@ def list_data_models_endpoint(
     status_filter: Annotated[str | None, Query(alias="status")] = None,
     type_filter: Annotated[str | None, Query(alias="type")] = None,
     ai_enabled: bool | None = None,
+    domain: str | None = None,
+    source_layer: str | None = None,
+    canonical_status: str | None = None,
+    site_scope: str | None = None,
 ) -> list[DataModel]:
     if type_filter is not None and type_filter not in {"A", "B"}:
         raise HTTPException(status_code=422, detail='type must be "A" or "B"')
@@ -80,6 +84,10 @@ def list_data_models_endpoint(
         status=status_filter,
         model_type=type_filter,
         ai_enabled=ai_enabled,
+        domain=domain,
+        source_layer=source_layer,
+        canonical_status=canonical_status,
+        site_scope=site_scope,
     )
 
 

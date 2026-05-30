@@ -174,6 +174,13 @@ curl "http://localhost:8000/data-models?status=active&type=A" \
   -H "Authorization: Bearer <token>"
 ```
 
+Filter by classification metadata:
+
+```bash
+curl "http://localhost:8000/data-models?domain=procurement&source_layer=curated_view&canonical_status=curated" \
+  -H "Authorization: Bearer <token>"
+```
+
 Update a model:
 
 ```bash
@@ -191,6 +198,22 @@ curl -X DELETE http://localhost:8000/data-models/<id> \
 ```
 
 This milestone stores model metadata and creates generated PostgreSQL storage tables for Type A models.
+
+### Classification and Namespace Metadata
+
+Data models include lightweight classification fields that prepare Avenue MDP for future canonical model organization, semantic search, IIoT hierarchy, and AI access:
+
+- `namespace`: lowercase dot-separated path, for example `avenue.demo.procurement.supplier`
+- `domain`: controlled business domain such as `procurement`, `quality`, `production`, `iiot`, or `finance`
+- `entity_type`: lowercase snake_case business object type such as `supplier` or `purchase_order`
+- `business_process`: controlled process such as `procure_to_pay` or `plan_to_produce`
+- `source_layer`: `source`, `staging`, `canonical`, `curated_view`, `analytical`, `external_api`, or `generated_table`
+- `canonical_status`: `source_aligned`, `canonical`, `curated`, `experimental`, or `deprecated`
+- `site_scope`: `enterprise`, `site`, `area`, `line`, `work_center`, `asset`, or `not_applicable`
+
+When fields are omitted, the backend applies safe defaults where possible. Procurement category models default to `domain=procurement`; Type A models default to `source_layer=generated_table`; Type B models mapped to `stg_` objects default to `staging`, and `vw_` objects default to `curated_view`. `canonical_status` defaults to `experimental` and `site_scope` defaults to `enterprise`.
+
+These fields are metadata only in this MVP. Full UNS/MQTT hierarchy, IIoT time-series storage, semantic query, knowledge graph, and AI agents remain future phases.
 
 Type A models now automatically create a PostgreSQL table in the `mdp_data` schema when the model is created. For example, creating the `invoice` Type A model creates:
 

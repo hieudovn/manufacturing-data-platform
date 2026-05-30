@@ -120,6 +120,100 @@ def test_list_data_models(client: TestClient, auth_headers: dict[str, str]) -> N
     assert len(response.json()) == 1
 
 
+def test_create_data_model_with_classification_fields(
+    client: TestClient,
+    auth_headers: dict[str, str],
+) -> None:
+    payload = type_a_payload(name="quality_result")
+    payload.update(
+        {
+            "namespace": "avenue.demo.quality.quality_result",
+            "domain": "quality",
+            "entity_type": "quality_result",
+            "business_process": "quality_management",
+            "source_layer": "external_api",
+            "canonical_status": "source_aligned",
+            "site_scope": "site",
+        }
+    )
+
+    response = client.post("/data-models", headers=auth_headers, json=payload)
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["namespace"] == "avenue.demo.quality.quality_result"
+    assert data["domain"] == "quality"
+    assert data["entity_type"] == "quality_result"
+    assert data["business_process"] == "quality_management"
+    assert data["source_layer"] == "external_api"
+    assert data["canonical_status"] == "source_aligned"
+    assert data["site_scope"] == "site"
+
+
+def test_invalid_namespace_fails(
+    client: TestClient,
+    auth_headers: dict[str, str],
+) -> None:
+    payload = type_a_payload()
+    payload["namespace"] = "Avenue.Demo.Procurement.Supplier"
+
+    response = client.post("/data-models", headers=auth_headers, json=payload)
+
+    assert response.status_code == 422
+
+
+def test_data_model_domain_filter(
+    client: TestClient,
+    auth_headers: dict[str, str],
+) -> None:
+    procurement_payload = type_a_payload(name="procurement_invoice")
+    procurement_payload["category"] = "procurement"
+    procurement_payload["domain"] = "procurement"
+    finance_payload = type_a_payload(name="finance_invoice")
+    finance_payload["domain"] = "finance"
+
+    client.post("/data-models", headers=auth_headers, json=procurement_payload)
+    client.post("/data-models", headers=auth_headers, json=finance_payload)
+
+    response = client.get("/data-models?domain=procurement", headers=auth_headers)
+
+    assert response.status_code == 200
+    assert [model["name"] for model in response.json()] == ["procurement_invoice"]
+
+
+def test_data_model_classification_defaults(
+    client: TestClient,
+    auth_headers: dict[str, str],
+) -> None:
+    payload = type_a_payload(name="purchase_invoice")
+    payload["category"] = "procurement"
+
+    response = client.post("/data-models", headers=auth_headers, json=payload)
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["domain"] == "procurement"
+    assert data["source_layer"] == "generated_table"
+    assert data["canonical_status"] == "experimental"
+    assert data["site_scope"] == "enterprise"
+
+
+def test_type_b_source_layer_default_from_source_table(
+    client: TestClient,
+    auth_headers: dict[str, str],
+) -> None:
+    client.post("/admin/demo/seed-procurement-staging", headers=auth_headers)
+
+    response = client.post(
+        "/data-models",
+        headers=auth_headers,
+        json=type_b_payload(name="supplier_linked"),
+    )
+
+    assert response.status_code == 201
+    assert response.json()["source_layer"] == "staging"
+
+
 def test_get_data_model_by_id(client: TestClient, auth_headers: dict[str, str]) -> None:
     create_response = client.post("/data-models", headers=auth_headers, json=type_a_payload())
     data_model_id = create_response.json()["id"]
