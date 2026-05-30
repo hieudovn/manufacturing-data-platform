@@ -1,6 +1,6 @@
-# Manufacturing Data Platform
+# Avenue Manufacturing Data Platform
 
-Manufacturing Data Platform is a Dockerized monorepo MVP foundation for configurable manufacturing data services. The current milestone includes FastAPI, React/Vite, PostgreSQL 16, SQLAlchemy, Alembic, Docker Compose, pgAdmin, JWT authentication, user management, data model metadata CRUD, generated Type A storage tables, dynamic inbound/outbound APIs, transaction logging, API key authentication for external systems, and external connection metadata management.
+Avenue Manufacturing Data Platform (Avenue MDP) is a Dockerized monorepo MVP foundation for configurable manufacturing data services. The current milestone includes FastAPI, React/Vite, PostgreSQL 16, SQLAlchemy, Alembic, Docker Compose, pgAdmin, JWT authentication, user management, data model metadata CRUD, generated Type A storage tables, dynamic inbound/outbound APIs, transaction logging, API key authentication for external systems, and external connection metadata management.
 
 ## Architecture Summary
 
@@ -72,7 +72,7 @@ docker compose down
 
 ## Admin Web UI
 
-The Admin Web UI at `http://localhost:3000` is the main MVP demo workspace. It uses a sidebar layout with:
+The Avenue MDP Admin Web UI at `http://localhost:3000` is the main MVP demo workspace. It uses an enterprise-style dark sidebar and light data workspace with:
 
 - Dashboard
 - Data Models

@@ -32,18 +32,49 @@ const emptyDataModel = {
 };
 
 const dataTypeOptions = ["text", "integer", "float", "boolean", "date", "datetime", "json"];
-const navItems = [
-  ["dashboard", "Dashboard"],
-  ["data-models", "Data Models"],
-  ["db-browser", "DB Browser"],
-  ["data-browser", "Data Browser"],
-  ["api-keys", "API Keys"],
-  ["transactions", "Transactions"],
-  ["connections", "Connections"],
-  ["demo-data", "Demo Data"],
-  ["users", "Users"],
+const navGroups = [
+  {
+    label: "Overview",
+    items: [["dashboard", "Dashboard", "D"]],
+  },
+  {
+    label: "Data Management",
+    items: [
+      ["data-models", "Data Models", "M"],
+      ["db-browser", "DB Browser", "DB"],
+      ["data-browser", "Data Browser", "API"],
+      ["demo-data", "Demo Data", "JDE"],
+    ],
+  },
+  {
+    label: "Integration & Access",
+    items: [
+      ["connections", "Connections", "C"],
+      ["api-keys", "API Keys", "K"],
+    ],
+  },
+  {
+    label: "Monitoring",
+    items: [["transactions", "Transactions", "T"]],
+  },
+  {
+    label: "Administration",
+    items: [["users", "Users", "U"]],
+  },
 ];
+const navItems = navGroups.flatMap((group) => group.items);
 const pageTitles = Object.fromEntries(navItems);
+const pageDescriptions = {
+  dashboard: "Overview of governed data models, integrations, and platform activity.",
+  "data-models": "Create and manage Type A and Type B governed data models.",
+  "db-browser": "Inspect PostgreSQL schemas, tables, views, columns, and preview data.",
+  "data-browser": "Browse outbound API results using governed data models.",
+  "api-keys": "Manage secure access for external systems, BI tools, and future AI agents.",
+  transactions: "Monitor inbound and outbound data transactions and errors.",
+  connections: "Configure and test external data source connections.",
+  "demo-data": "Seed and inspect mock procurement staging data for MVP demos.",
+  users: "Manage user access to the platform.",
+};
 const categoryOptions = [
   "",
   "procurement",
@@ -174,6 +205,51 @@ function isToday(value) {
     return false;
   }
   return new Date(value).toDateString() === new Date().toDateString();
+}
+
+function Badge({ children, tone = "neutral" }) {
+  return <span className={`badge badge--${tone}`}>{children}</span>;
+}
+
+function badgeTone(value = "") {
+  const normalized = String(value).toLowerCase();
+  if (["active", "success", "ok", "posted", "paid"].includes(normalized)) {
+    return "success";
+  }
+  if (["failed", "inactive", "error", "cancelled"].includes(normalized)) {
+    return "danger";
+  }
+  if (["warning", "open", "pending", "partial"].includes(normalized)) {
+    return "warning";
+  }
+  if (["a", "inbound", "base table"].includes(normalized)) {
+    return "info";
+  }
+  if (["b", "outbound", "view"].includes(normalized)) {
+    return "accent";
+  }
+  return "neutral";
+}
+
+function SectionCard({ title, eyebrow, children, actions, className = "" }) {
+  return (
+    <section className={`section-card ${className}`}>
+      {(title || eyebrow || actions) && (
+        <div className="section-heading">
+          <div>
+            {eyebrow && <p className="panel-label">{eyebrow}</p>}
+            {title && <h2>{title}</h2>}
+          </div>
+          {actions && <div className="item-actions">{actions}</div>}
+        </div>
+      )}
+      {children}
+    </section>
+  );
+}
+
+function EmptyState({ message }) {
+  return <p className="empty-state">{message}</p>;
 }
 
 const emptyConnection = {
@@ -530,6 +606,13 @@ function App() {
 
   function removeBrowserFilter(field) {
     setBrowserAppliedFilters((current) => current.filter((filter) => filter.field !== field));
+  }
+
+  function clearBrowserFilters() {
+    setBrowserAppliedFilters([]);
+    setBrowserFilterField("");
+    setBrowserFilterValue("");
+    setBrowserMessage("");
   }
 
   async function loadBrowserRecordByKey(event) {
@@ -1091,34 +1174,44 @@ function App() {
   if (!token) {
     return (
       <main className="auth-page">
-        <section className="auth-panel">
-          <p className="eyebrow">Manufacturing Data Platform</p>
-          <h1>Sign in</h1>
-          <form className="login-form" onSubmit={handleLogin}>
-            <label>
-              Username
-              <input
-                value={username}
-                onChange={(event) => setUsername(event.target.value)}
-                autoComplete="username"
-                required
-              />
-            </label>
-            <label>
-              Password
-              <input
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                autoComplete="current-password"
-                required
-              />
-            </label>
-            <button type="submit" disabled={isLoading}>
-              {isLoading ? "Signing in..." : "Sign in"}
-            </button>
-            {error && <p className="error-text">{error}</p>}
-          </form>
+        <section className="auth-layout">
+          <div className="auth-brand">
+            <div className="brand-mark">A</div>
+            <p className="eyebrow">Avenue Manufacturing Data Platform</p>
+            <h1>Avenue MDP</h1>
+            <p className="summary">
+              Governed data platform for manufacturing operations and enterprise integration.
+            </p>
+          </div>
+          <section className="auth-panel">
+            <p className="eyebrow">Secure Admin Access</p>
+            <h2>Sign in to Avenue MDP</h2>
+            <form className="login-form" onSubmit={handleLogin}>
+              <label>
+                Username
+                <input
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                  autoComplete="username"
+                  required
+                />
+              </label>
+              <label>
+                Password
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  autoComplete="current-password"
+                  required
+                />
+              </label>
+              <button type="submit" disabled={isLoading}>
+                {isLoading ? "Signing in..." : "Sign in"}
+              </button>
+              {error && <p className="error-text">{error}</p>}
+            </form>
+          </section>
         </section>
       </main>
     );
@@ -1127,38 +1220,54 @@ function App() {
   return (
     <main className="admin-shell">
       <aside className="admin-sidebar">
-        <div>
-          <p className="eyebrow">Manufacturing Data Platform</p>
-          <h2>Admin MVP</h2>
+        <div className="sidebar-brand">
+          <div className="brand-mark brand-mark--small">A</div>
+          <div>
+            <h2>Avenue MDP</h2>
+            <span>Avenue Manufacturing Data Platform</span>
+          </div>
         </div>
         <nav className="side-nav" aria-label="Admin navigation">
-          {navItems.map(([key, label]) => (
-            <button
-              className={page === key ? "side-nav__item side-nav__item--active" : "side-nav__item"}
-              key={key}
-              type="button"
-              onClick={() => setPage(key)}
-            >
-              {label}
-            </button>
+          {navGroups.map((group) => (
+            <div className="side-nav__group" key={group.label}>
+              <p>{group.label}</p>
+              {group.items.map(([key, label, icon]) => (
+                <button
+                  className={page === key ? "side-nav__item side-nav__item--active" : "side-nav__item"}
+                  key={key}
+                  type="button"
+                  onClick={() => setPage(key)}
+                >
+                  <span className="nav-icon">{icon}</span>
+                  {label}
+                </button>
+              ))}
+            </div>
           ))}
         </nav>
+        <div className="sidebar-user">
+          <div>
+            <span>{currentUser?.full_name || currentUser?.username || "User"}</span>
+            <small>{currentUser?.role || "admin"}</small>
+          </div>
+          <button type="button" onClick={handleLogout}>Logout</button>
+        </div>
       </aside>
 
       <section className="admin-main">
         <header className="admin-topbar">
           <div>
-            <p className="eyebrow">Admin Web UI</p>
+            <p className="eyebrow">Avenue MDP / {pageTitles[page] || "Transactions"}</p>
             <h1>{pageTitles[page] || "Transactions"}</h1>
             <p className="summary">
-              Govern staging data, data models, APIs, access keys, and integration activity from one workspace.
+              {pageDescriptions[page] || "Govern staging data, data models, APIs, access keys, and integration activity."}
             </p>
           </div>
           <div className="user-menu">
+            <input aria-label="Search" placeholder="Search Avenue MDP" />
+            <button className="icon-button" type="button" aria-label="Help">?</button>
+            <button className="icon-button" type="button" aria-label="Notifications">!</button>
             <span>{currentUser?.full_name || currentUser?.username || "User"}</span>
-            <button className="secondary-button" type="button" onClick={handleLogout}>
-              Logout
-            </button>
           </div>
         </header>
 
@@ -1214,6 +1323,7 @@ function App() {
             appliedFilters={browserAppliedFilters}
             addFilter={addBrowserFilter}
             removeFilter={removeBrowserFilter}
+            clearFilters={clearBrowserFilters}
             lookupKey={browserLookupKey}
             setLookupKey={setBrowserLookupKey}
             lookupRecord={browserLookupRecord}
@@ -1307,82 +1417,137 @@ function Dashboard({
     (transaction) => transaction.direction === "outbound" && isToday(transaction.created_at),
   ).length;
   const failedTransactions = transactions.filter((transaction) => transaction.status === "failed").length;
+  const failedToday = transactions.filter(
+    (transaction) => transaction.status === "failed" && isToday(transaction.created_at),
+  ).length;
+  const modelById = Object.fromEntries(dataModels.map((model) => [model.id, model]));
+  const recentTransactions = transactions.slice(0, 6);
   const metrics = [
     ["Total data models", dataModels.length],
     ["Type A models", typeAModels.length],
     ["Type B models", typeBModels.length],
     ["Active API keys", apiKeys.filter((apiKey) => apiKey.is_active).length],
     ["Active connections", connections.filter((connection) => connection.status === "active").length],
-    ["Inbound today", inboundToday],
     ["Outbound today", outboundToday],
-    ["Failed transactions", failedTransactions],
+    ["Failed today", failedToday],
   ];
 
   return (
-    <section className="dashboard-grid">
-      <article className="status-panel status-panel--wide">
-        <p className="panel-label">MVP Value</p>
-        <h2>Govern ERP and staging data through reusable APIs</h2>
-        <p className="helper-text">
-          Browse migrated procurement data, model it as Type A or Type B, expose outbound APIs, issue scoped API keys, and monitor every integration call.
-        </p>
-      </article>
+    <section className="page-stack">
+      <div className="kpi-grid">
+        {metrics.map(([label, value]) => (
+          <article className="metric-card" key={label}>
+            <p className="panel-label">{label}</p>
+            <h2>{value}</h2>
+          </article>
+        ))}
+      </div>
 
-      <article className="status-panel" aria-label="Current user">
-        <p className="panel-label">Current User</p>
-        <h2>{currentUser?.full_name || currentUser?.username || "Loading..."}</h2>
-        <dl>
-          <div>
-            <dt>Email</dt>
-            <dd>{currentUser?.email || "-"}</dd>
+      <div className="dashboard-split">
+        <SectionCard title="Platform Overview" eyebrow="MVP Value">
+          <h3>Govern ERP and staging data through reusable APIs</h3>
+          <p className="helper-text">
+            Browse migrated procurement data, model it as Type A or Type B, expose outbound APIs, issue scoped API keys, and monitor every integration call.
+          </p>
+          <div className="summary-grid">
+            <div>
+              <span>{inboundToday}</span>
+              <small>Inbound today</small>
+            </div>
+            <div>
+              <span>{failedTransactions}</span>
+              <small>Total failed transactions</small>
+            </div>
           </div>
-          <div>
-            <dt>Role</dt>
-            <dd>{currentUser?.role || "-"}</dd>
+        </SectionCard>
+
+        <SectionCard title="Quick Actions" eyebrow="Demo Workflow">
+          <div className="quick-link-grid">
+            <button type="button" onClick={() => setPage("data-models")}>Create Data Model</button>
+            <button type="button" onClick={() => setPage("api-keys")}>Create API Key</button>
+            <button type="button" onClick={() => setPage("connections")}>Add Connection</button>
+            <button type="button" onClick={() => setPage("data-browser")}>Browse Data</button>
+            <button type="button" onClick={() => setPage("db-browser")}>Open DB Browser</button>
+            <button type="button" onClick={() => setPage("demo-data")}>Seed Demo Data</button>
+            <button type="button" onClick={() => startTypeBTemplate("supplier")}>Type B Supplier</button>
+            <button type="button" onClick={() => startTypeBTemplate("purchase_order_summary")}>PO Summary Model</button>
           </div>
-        </dl>
-      </article>
+        </SectionCard>
+      </div>
 
-      <article className="status-panel" aria-label="Backend service status">
-        <p className="panel-label">Backend API</p>
-        <h2>{health?.service || "manufacturing-data-platform"}</h2>
-        <span className={health ? "status-pill status-pill--ok" : "status-pill"}>
-          {health ? health.status : "unavailable"}
-        </span>
-      </article>
+      <div className="dashboard-split">
+        <SectionCard title="Recent Transactions" eyebrow="Monitoring">
+          <div className="browser-results">
+            <table>
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Direction</th>
+                  <th>Model</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentTransactions.map((transaction) => (
+                  <tr key={transaction.id}>
+                    <td>{new Date(transaction.created_at).toLocaleString()}</td>
+                    <td><Badge tone={badgeTone(transaction.direction)}>{transaction.direction}</Badge></td>
+                    <td>{modelById[transaction.data_model_id]?.name || transaction.data_model_id || "-"}</td>
+                    <td><Badge tone={badgeTone(transaction.status)}>{transaction.status}</Badge></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {recentTransactions.length === 0 && <EmptyState message="No transactions logged yet." />}
+          </div>
+        </SectionCard>
 
-      {metrics.map(([label, value]) => (
-        <article className="metric-card" key={label}>
-          <p className="panel-label">{label}</p>
-          <h2>{value}</h2>
+        <SectionCard title="Activity Snapshot" eyebrow="Operations">
+          <div className="activity-bars">
+            <div>
+              <span>Inbound today</span>
+              <strong style={{ width: `${Math.min(inboundToday * 12, 100)}%` }} />
+            </div>
+            <div>
+              <span>Outbound today</span>
+              <strong style={{ width: `${Math.min(outboundToday * 12, 100)}%` }} />
+            </div>
+            <div>
+              <span>Failed today</span>
+              <strong style={{ width: `${Math.min(failedToday * 16, 100)}%` }} />
+            </div>
+          </div>
+          <p className="helper-text">
+            {demoCounts
+              ? Object.entries(demoCounts).map(([table, count]) => `${table}: ${count}`).join(" | ")
+              : "Open Demo Data to seed or refresh the mock JDE procurement staging tables."}
+          </p>
+        </SectionCard>
+      </div>
+
+      <div className="dashboard-split">
+        <article className="status-panel">
+          <p className="panel-label">Current User</p>
+          <h2>{currentUser?.full_name || currentUser?.username || "Loading..."}</h2>
+          <dl>
+            <div>
+              <dt>Email</dt>
+              <dd>{currentUser?.email || "-"}</dd>
+            </div>
+            <div>
+              <dt>Role</dt>
+              <dd>{currentUser?.role || "-"}</dd>
+            </div>
+          </dl>
         </article>
-      ))}
 
-      <article className="status-panel status-panel--wide">
-        <p className="panel-label">Demo Seed</p>
-        <h2>{demoCounts ? "Procurement staging data ready" : "No demo summary loaded"}</h2>
-        <p className="helper-text">
-          {demoCounts
-            ? Object.entries(demoCounts).map(([table, count]) => `${table}: ${count}`).join(" | ")
-            : "Open Demo Data to seed or refresh the mock JDE procurement staging tables."}
-        </p>
-      </article>
-
-      <article className="quick-links status-panel--wide">
-        <p className="panel-label">Quick Links</p>
-        <div className="quick-link-grid">
-          <button type="button" onClick={() => startTypeBTemplate("supplier")}>
-            Create Type B Supplier Model
-          </button>
-          <button type="button" onClick={() => startTypeBTemplate("purchase_order_summary")}>
-            Create Type B Purchase Order Summary Model
-          </button>
-          <button type="button" onClick={() => setPage("db-browser")}>Open DB Browser</button>
-          <button type="button" onClick={() => setPage("data-browser")}>Open Data Browser</button>
-          <button type="button" onClick={() => setPage("api-keys")}>Create API Key</button>
-          <button type="button" onClick={() => setPage("transactions")}>View Transactions</button>
-        </div>
-      </article>
+        <article className="status-panel">
+          <p className="panel-label">Backend API</p>
+          <h2>Avenue MDP API</h2>
+          <p className="table-name">{health?.service || "manufacturing-data-platform"}</p>
+          <Badge tone={health ? "success" : "neutral"}>{health ? health.status : "unavailable"}</Badge>
+        </article>
+      </div>
     </section>
   );
 }
@@ -1543,11 +1708,33 @@ function DataModelsPage({
         <div className="form-grid">
           <label>
             Primary Key
-            <input
-              value={form.primary_key || ""}
-              onChange={(event) => setForm({ ...form, primary_key: event.target.value })}
-              placeholder={form.type === "B" ? "supplier_code" : "invoice_no"}
-            />
+            {form.type === "B" ? (
+              <select
+                value={form.primary_key || ""}
+                onChange={(event) => {
+                  const primaryKey = event.target.value;
+                  setForm({
+                    ...form,
+                    primary_key: primaryKey,
+                    attributes: form.attributes.map((attribute) => ({
+                      ...attribute,
+                      is_primary_key: attribute.name === primaryKey,
+                    })),
+                  });
+                }}
+              >
+                <option value="">Select primary key</option>
+                {form.attributes.filter((attribute) => attribute.name).map((attribute) => (
+                  <option key={attribute.name} value={attribute.name}>{attribute.name}</option>
+                ))}
+              </select>
+            ) : (
+              <input
+                value={form.primary_key || ""}
+                onChange={(event) => setForm({ ...form, primary_key: event.target.value })}
+                placeholder="invoice_no"
+              />
+            )}
           </label>
           <label>
             Sensitivity
@@ -1732,9 +1919,9 @@ function DataModelsPage({
                 <tr key={model.id}>
                   <td>{model.display_name}</td>
                   <td>{model.name}</td>
-                  <td>Type {model.type}</td>
+                  <td><Badge tone={badgeTone(model.type)}>Type {model.type}</Badge></td>
                   <td>{model.category || "-"}</td>
-                  <td>{model.status}</td>
+                  <td><Badge tone={badgeTone(model.status)}>{model.status}</Badge></td>
                   <td className="table-name">{getModelSource(model)}</td>
                   <td>{model.primary_key || "-"}</td>
                   <td>{String(model.ai_enabled)}</td>
@@ -2119,7 +2306,8 @@ function TypeBMappingDesigner({
           <span>Display</span>
           <span>Type</span>
           <span>Source Column</span>
-          <span>Flags</span>
+          <span>Primary Key</span>
+          <span>Required</span>
           <span>Description</span>
           <span>Action</span>
         </div>
@@ -2162,22 +2350,22 @@ function TypeBMappingDesigner({
               <label className="compact-check">
                 <input
                   type="checkbox"
-                  checked={attribute.required}
-                  onChange={(event) =>
-                    updateMappedAttribute(index, "required", event.target.checked)
-                  }
-                />
-                Req
-              </label>
-              <label className="compact-check">
-                <input
-                  type="checkbox"
                   checked={attribute.is_primary_key}
                   onChange={(event) =>
                     updateMappedAttribute(index, "is_primary_key", event.target.checked)
                   }
                 />
                 PK
+              </label>
+              <label className="compact-check">
+                <input
+                  type="checkbox"
+                  checked={attribute.required}
+                  onChange={(event) =>
+                    updateMappedAttribute(index, "required", event.target.checked)
+                  }
+                />
+                Req
               </label>
             </div>
             <textarea
@@ -2358,11 +2546,11 @@ function TransactionsPage({
             }
           >
             <span>{new Date(transaction.created_at).toLocaleString()}</span>
-            <span>{transaction.direction}</span>
+            <span><Badge tone={badgeTone(transaction.direction)}>{transaction.direction}</Badge></span>
             <span>{transaction.protocol}</span>
             <span>{transaction.endpoint || "-"}</span>
-            <span>{transaction.status}</span>
-            <span>{transaction.auth_type || "-"}</span>
+            <span><Badge tone={badgeTone(transaction.status)}>{transaction.status}</Badge></span>
+            <span>{transaction.auth_type ? <Badge tone={badgeTone(transaction.auth_type)}>{transaction.auth_type}</Badge> : "-"}</span>
             <span>{transaction.source_system || "-"}</span>
             <span>{modelById[transaction.data_model_id]?.name || transaction.data_model_id || "-"}</span>
             <span>{transaction.error_message || "-"}</span>
@@ -2405,6 +2593,7 @@ function DataBrowserPage({
   appliedFilters,
   addFilter,
   removeFilter,
+  clearFilters,
   lookupKey,
   setLookupKey,
   lookupRecord,
@@ -2471,6 +2660,7 @@ function DataBrowserPage({
           />
         </label>
         <button type="button" onClick={addFilter}>Add Filter</button>
+        <button type="button" onClick={clearFilters}>Clear</button>
         <button type="submit">Load Records</button>
       </form>
 
@@ -2481,7 +2671,7 @@ function DataBrowserPage({
               <p className="panel-label">Outbound API</p>
               <h2>{selected.display_name}</h2>
             </div>
-            <span className="status-pill">Type {selected.type}</span>
+            <Badge tone={badgeTone(selected.type)}>Type {selected.type}</Badge>
           </div>
           <p className="table-name">Primary key: {selected.primary_key || "-"}</p>
           <p className="table-name">GET /outbound/{selected.name}</p>
@@ -2628,6 +2818,13 @@ function ApiKeysPage({
             Expires At
             <input type="datetime-local" value={form.expires_at} onChange={(event) => setForm({ ...form, expires_at: event.target.value })} />
           </label>
+          <label>
+            Status
+            <select value={form.is_active ? "active" : "inactive"} onChange={(event) => setForm({ ...form, is_active: event.target.value === "active" })}>
+              <option value="active">active</option>
+              <option value="inactive">inactive</option>
+            </select>
+          </label>
         </div>
         <label>
           Description
@@ -2641,10 +2838,6 @@ function ApiKeysPage({
           <label className="compact-check">
             <input type="checkbox" checked={form.allowed_directions.includes("outbound")} onChange={() => toggleDirection("outbound")} />
             Outbound
-          </label>
-          <label className="compact-check">
-            <input type="checkbox" checked={form.is_active} onChange={(event) => setForm({ ...form, is_active: event.target.checked })} />
-            Active
           </label>
         </div>
         {form.allowed_model_scope === "selected" && (
@@ -2664,30 +2857,53 @@ function ApiKeysPage({
         )}
         <button className="primary-button" type="submit">{editingId ? "Update API Key" : "Create API Key"}</button>
         {createdPlainApiKey && (
-          <div className="secret-panel">
-            <p>Copy this API key now. It will not be shown again.</p>
+          <div className="secret-panel alert alert--warning">
+            <p>This API key will only be shown once. Please copy and store it securely.</p>
             <code>{createdPlainApiKey}</code>
           </div>
         )}
         {message && <p className="form-message">{message}</p>}
       </form>
 
-      <section className="model-list">
-        {apiKeys.map((apiKey) => (
-          <article className="model-item" key={apiKey.id}>
-            <div>
-              <p className="panel-label">{apiKey.key_prefix} - {apiKey.is_active ? "active" : "inactive"}</p>
-              <h2>{apiKey.name}</h2>
-              <p>{apiKey.source_system || "No source system"}</p>
-              <p>{apiKey.allowed_directions.join(", ")} - {apiKey.allowed_models?.join(", ") || "all models"}</p>
-            </div>
-            <div className="item-actions">
-              <button type="button" onClick={() => editApiKey(apiKey)}>Edit</button>
-              <button type="button" onClick={() => deactivateApiKey(apiKey.id)} disabled={!apiKey.is_active}>Deactivate</button>
-            </div>
-          </article>
-        ))}
-      </section>
+      <SectionCard title="Issued API Keys" eyebrow="External Access" className="table-panel">
+        <div className="browser-results">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Source System</th>
+                <th>Directions</th>
+                <th>Allowed Models</th>
+                <th>Status</th>
+                <th>Expires At</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {apiKeys.map((apiKey) => (
+                <tr key={apiKey.id}>
+                  <td>
+                    <strong>{apiKey.name}</strong>
+                    <p className="table-name">{apiKey.key_prefix}</p>
+                  </td>
+                  <td>{apiKey.source_system || "-"}</td>
+                  <td>{apiKey.allowed_directions.map((direction) => <Badge key={direction} tone={badgeTone(direction)}>{direction}</Badge>)}</td>
+                  <td>{apiKey.allowed_models?.join(", ") || "all models"}</td>
+                  <td><Badge tone={apiKey.is_active ? "success" : "danger"}>{apiKey.is_active ? "active" : "inactive"}</Badge></td>
+                  <td>{apiKey.expires_at ? new Date(apiKey.expires_at).toLocaleString() : "-"}</td>
+                  <td>
+                    <div className="inline-actions">
+                      <button type="button" onClick={() => editApiKey(apiKey)}>Edit</button>
+                      <button type="button" onClick={() => deactivateApiKey(apiKey.id)} disabled={!apiKey.is_active}>Deactivate</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {apiKeys.length === 0 && <EmptyState message="No API keys created yet." />}
+        </div>
+      </SectionCard>
     </section>
   );
 }
@@ -2798,7 +3014,10 @@ function ConnectionsPage({
         {connections.map((connection) => (
           <article className="model-item" key={connection.id}>
             <div>
-              <p className="panel-label">{connection.type} - {connection.status}</p>
+              <p>
+                <Badge tone="neutral">{connection.type}</Badge>
+                <Badge tone={badgeTone(connection.status)}>{connection.status}</Badge>
+              </p>
               <h2>{connection.name}</h2>
               <p>{connection.description || connection.host || connection.base_url || "No endpoint details"}</p>
               <p className="table-name">
@@ -2907,7 +3126,7 @@ function DbBrowserPage({
               key={table.table_name}
             >
               <div>
-                <p className="panel-label">{table.table_type}</p>
+                <Badge tone={badgeTone(table.table_type)}>{table.table_type}</Badge>
                 <h2>{table.table_name}</h2>
               </div>
               <div className="item-actions">

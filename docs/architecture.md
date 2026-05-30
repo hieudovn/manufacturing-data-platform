@@ -1,6 +1,6 @@
 # MVP Architecture
 
-This milestone establishes a clean, Dockerized project foundation for the Manufacturing Data Platform. It is designed to run locally on a personal laptop with Docker Compose before later deployment to a cloud server.
+This milestone establishes a clean, Dockerized project foundation for Avenue Manufacturing Data Platform (Avenue MDP). It is designed to run locally on a personal laptop with Docker Compose before later deployment to a cloud server.
 
 ## Services
 

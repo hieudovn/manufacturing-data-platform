@@ -1,6 +1,6 @@
 # Data Model Design
 
-Data models describe business objects in the Manufacturing Data Platform. The current foundation stores metadata, creates generated PostgreSQL storage tables for Type A models, and exposes dynamic inbound/outbound REST APIs for Type A models.
+Data models describe business objects in Avenue Manufacturing Data Platform (Avenue MDP). The current foundation stores metadata, creates generated PostgreSQL storage tables for Type A models, and exposes dynamic inbound/outbound REST APIs for Type A models.
 
 ## Model Types
 
