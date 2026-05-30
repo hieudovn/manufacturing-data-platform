@@ -400,7 +400,7 @@ Current limitations:
 
 ## Type B Mapping UI Flow
 
-The Data Models page includes a Type B Mapping Designer for creating linked models without writing JSON manually.
+The Data Models page includes a Type B Mapping Designer for creating linked models without writing JSON manually. The Admin UI now keeps system-backed choices in selectors: source schema, source table/view, source column, platform data type, sensitivity, category, source system, owner department, and the primary key flag.
 
 Basic flow:
 
@@ -414,6 +414,15 @@ Basic flow:
 8. Preview mapped rows.
 9. Save the model.
 
+Generated attributes use the source column name by default, but the attribute name can be edited. Reserved platform system names are renamed automatically in the UI:
+
+- `id` -> `source_id`
+- `created_at` -> `source_created_at`
+- `updated_at` -> `source_updated_at`
+- `raw_payload` -> `source_raw_payload`
+
+The original `source_column` mapping is preserved, so a source column named `updated_at` can still be exposed as the model attribute `source_updated_at`.
+
 For `supplier`, select `mdp_staging.stg_jde_supplier` and mark `supplier_code` as the primary key. Suggested fields are `supplier_code`, `supplier_name`, `tax_code`, `supplier_type`, `country`, `city`, and `status`.
 
 For `purchase_order_summary`, select `mdp_staging.vw_jde_purchase_order_summary` and mark `po_no` as the primary key. Suggested fields are `po_no`, `supplier_code`, `supplier_name`, `buyer_name`, `company_code`, `branch_plant`, `order_date`, `currency`, `po_status`, `total_amount`, `line_count`, `total_ordered_quantity`, `total_received_quantity`, `open_line_count`, `invoice_count`, `total_invoice_amount`, `total_open_invoice_amount`, and `payment_status_summary`.
@@ -422,3 +431,15 @@ Type A and Type B differ in the UI:
 
 - Type A creates a generated PostgreSQL table for ingested data.
 - Type B links to an existing staging table or view and does not create a new table.
+
+## Admin Demo Flow
+
+The UI demo path for Type B linked models is:
+
+1. Seed the mock JDE procurement staging tables from `Demo Data`.
+2. Inspect `mdp_staging` tables and views from `DB Browser`.
+3. Create the `supplier` Type B model from `stg_jde_supplier`.
+4. Create the `purchase_order_summary` Type B model from `vw_jde_purchase_order_summary`.
+5. Query both saved models from `Data Browser`, which calls the governed outbound APIs.
+6. Create an API key scoped to selected models and directions from `API Keys`.
+7. Confirm JWT/API-key activity in `Transactions`.

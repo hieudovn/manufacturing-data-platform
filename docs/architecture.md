@@ -6,7 +6,7 @@ This milestone establishes a clean, Dockerized project foundation for the Manufa
 
 ### Frontend
 
-The frontend is a React application built with Vite. It runs on port `3000` and provides login, a protected dashboard, data model management, data browsing, transaction viewing, API key management, and connection management screens.
+The frontend is a React application built with Vite. It runs on port `3000` and provides login plus a consolidated Admin UI with a sidebar, dashboard metrics, data model management, Type B mapping, DB browsing, outbound data browsing, transaction viewing, API key management, connection management, demo data controls, and user viewing.
 
 ### Backend
 
@@ -28,7 +28,9 @@ The `mdp_staging` PostgreSQL schema contains mock JDE procurement staging tables
 
 The DB Browser provides JWT-protected, read-only metadata and preview access to verified PostgreSQL schemas and tables. It is intended to help administrators inspect staging data before defining Type B Linked Data Models.
 
-Type B Linked Data Model backend support validates mappings from model attributes to existing PostgreSQL staging columns and can preview mapped rows without creating physical tables. Type B outbound APIs remain deferred.
+The Data Browser provides a UI over governed outbound APIs. Administrators select a saved Type A or Type B model, apply equality filters using model attribute names, optionally look up a primary key value, and view the API response without directly querying source tables.
+
+Type B Linked Data Model backend support validates mappings from model attributes to existing PostgreSQL staging columns, previews mapped rows without creating physical tables, and exposes saved linked models through governed outbound APIs.
 
 ### Database
 

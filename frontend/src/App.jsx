@@ -32,6 +32,50 @@ const emptyDataModel = {
 };
 
 const dataTypeOptions = ["text", "integer", "float", "boolean", "date", "datetime", "json"];
+const navItems = [
+  ["dashboard", "Dashboard"],
+  ["data-models", "Data Models"],
+  ["db-browser", "DB Browser"],
+  ["data-browser", "Data Browser"],
+  ["api-keys", "API Keys"],
+  ["transactions", "Transactions"],
+  ["connections", "Connections"],
+  ["demo-data", "Demo Data"],
+  ["users", "Users"],
+];
+const pageTitles = Object.fromEntries(navItems);
+const categoryOptions = [
+  "",
+  "procurement",
+  "finance",
+  "quality",
+  "production",
+  "maintenance",
+  "inventory",
+  "master_data",
+];
+const sourceSystemOptions = [
+  "",
+  "JDE ERP",
+  "External API",
+  "Manual / Mock Data",
+  "SQL Server",
+  "PostgreSQL",
+  "Other",
+];
+const ownerDepartmentOptions = [
+  "",
+  "Procurement",
+  "Finance",
+  "Operations",
+  "Quality",
+  "Maintenance",
+  "IT/OT",
+  "Other",
+];
+const sensitivityOptions = ["public", "internal", "confidential", "restricted"];
+const apiKeySourceSystems = ["", "External Test Client", "ESB", "BI", "AI Agent", "QMS", "MES", "ERP", "Other"];
+const reservedQueryParams = new Set(["limit", "offset", "include_meta", "include_raw"]);
 const reservedSourceAttributeNames = {
   id: "source_id",
   raw_payload: "source_raw_payload",
@@ -40,7 +84,13 @@ const reservedSourceAttributeNames = {
 };
 
 function attributeNameFromSourceColumn(columnName = "") {
-  return reservedSourceAttributeNames[columnName] || columnName;
+  const sanitized = columnName
+    .trim()
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replace(/[^a-zA-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toLowerCase();
+  return reservedSourceAttributeNames[sanitized] || sanitized;
 }
 
 function displayNameFromAttributeName(attributeName = "") {
@@ -99,6 +149,31 @@ function formatApiDetail(detail) {
     return JSON.stringify(detail);
   }
   return "Request failed";
+}
+
+function getModelSource(model) {
+  if (model.generated_table) {
+    return model.generated_table;
+  }
+  if (model.source_schema && model.source_table) {
+    return `${model.source_schema}.${model.source_table}`;
+  }
+  const mappedAttribute = model.attributes?.find((attribute) => attribute.source_schema && attribute.source_table);
+  if (mappedAttribute) {
+    return `${mappedAttribute.source_schema}.${mappedAttribute.source_table}`;
+  }
+  return "-";
+}
+
+function getModelAttributes(model) {
+  return model?.attributes?.map((attribute) => attribute.name).filter(Boolean) || [];
+}
+
+function isToday(value) {
+  if (!value) {
+    return false;
+  }
+  return new Date(value).toDateString() === new Date().toDateString();
 }
 
 const emptyConnection = {
@@ -161,9 +236,13 @@ function App() {
   const [browserModels, setBrowserModels] = useState([]);
   const [selectedBrowserModel, setSelectedBrowserModel] = useState("");
   const [browserRecords, setBrowserRecords] = useState([]);
+  const [browserLookupRecord, setBrowserLookupRecord] = useState(null);
   const [browserLimit, setBrowserLimit] = useState(100);
   const [browserOffset, setBrowserOffset] = useState(0);
-  const [browserFilters, setBrowserFilters] = useState("");
+  const [browserFilterField, setBrowserFilterField] = useState("");
+  const [browserFilterValue, setBrowserFilterValue] = useState("");
+  const [browserAppliedFilters, setBrowserAppliedFilters] = useState([]);
+  const [browserLookupKey, setBrowserLookupKey] = useState("");
   const [browserMessage, setBrowserMessage] = useState("");
   const [apiKeys, setApiKeys] = useState([]);
   const [apiKeyForm, setApiKeyForm] = useState({
@@ -171,7 +250,8 @@ function App() {
     description: "",
     source_system: "",
     allowed_directions: ["inbound", "outbound"],
-    allowed_models: "",
+    allowed_model_scope: "all",
+    allowed_models: [],
     expires_at: "",
     is_active: true,
   });
@@ -195,6 +275,21 @@ function App() {
   const [form, setForm] = useState(emptyDataModel);
   const [editingId, setEditingId] = useState(null);
   const [modelMessage, setModelMessage] = useState("");
+  const [modelFilters, setModelFilters] = useState({
+    type: "all",
+    status: "active",
+    category: "all",
+    ai_enabled: "all",
+  });
+  const [transactionFilters, setTransactionFilters] = useState({
+    direction: "all",
+    protocol: "all",
+    status: "all",
+    data_model_id: "all",
+    auth_type: "all",
+  });
+  const [users, setUsers] = useState([]);
+  const [usersMessage, setUsersMessage] = useState("");
   const authHeaders = useMemo(
     () => ({
       Authorization: `Bearer ${token}`,
@@ -257,6 +352,17 @@ function App() {
   }, [token]);
 
   useEffect(() => {
+    if (!token) {
+      return;
+    }
+    loadDataModels();
+    loadApiKeys();
+    loadConnections();
+    loadTransactions();
+    loadDemoSummary();
+  }, [token]);
+
+  useEffect(() => {
     if (token && page === "data-models") {
       loadDataModels();
     }
@@ -277,6 +383,9 @@ function App() {
     }
     if (token && page === "db-browser") {
       loadDbSchemas();
+    }
+    if (token && page === "users") {
+      loadUsers();
     }
   }, [page, token]);
 
@@ -342,6 +451,21 @@ function App() {
     }
   }
 
+  async function loadUsers() {
+    try {
+      const response = await fetch(`${API_BASE_URL}/users`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        throw new Error("Unable to load users");
+      }
+      setUsers(await response.json());
+      setUsersMessage("");
+    } catch (err) {
+      setUsersMessage(err instanceof Error ? err.message : "Unable to load users");
+    }
+  }
+
   async function loadBrowserModels() {
     try {
       const response = await fetch(`${API_BASE_URL}/data-models?status=active`, {
@@ -371,16 +495,8 @@ function App() {
         limit: String(browserLimit),
         offset: String(browserOffset),
       });
-      for (const filter of browserFilters.split("&")) {
-        const trimmed = filter.trim();
-        if (!trimmed) {
-          continue;
-        }
-        const [field, ...rest] = trimmed.split("=");
-        const value = rest.join("=");
-        if (field && value) {
-          params.append(field.trim(), value.trim());
-        }
+      for (const filter of browserAppliedFilters) {
+        params.append(filter.field, filter.value);
       }
       const response = await fetch(`${API_BASE_URL}/outbound/${selectedBrowserModel}?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -391,10 +507,50 @@ function App() {
       }
       const data = await response.json();
       setBrowserRecords(data.data);
+      setBrowserLookupRecord(null);
       setBrowserMessage(`${data.count} records loaded.`);
     } catch (err) {
       setBrowserRecords([]);
       setBrowserMessage(err instanceof Error ? err.message : "Unable to load records");
+    }
+  }
+
+  function addBrowserFilter() {
+    if (!browserFilterField || !browserFilterValue.trim() || reservedQueryParams.has(browserFilterField)) {
+      setBrowserMessage("Select an attribute and enter a filter value.");
+      return;
+    }
+    setBrowserAppliedFilters((current) => [
+      ...current.filter((filter) => filter.field !== browserFilterField),
+      { field: browserFilterField, value: browserFilterValue.trim() },
+    ]);
+    setBrowserFilterValue("");
+    setBrowserMessage("");
+  }
+
+  function removeBrowserFilter(field) {
+    setBrowserAppliedFilters((current) => current.filter((filter) => filter.field !== field));
+  }
+
+  async function loadBrowserRecordByKey(event) {
+    event?.preventDefault();
+    if (!selectedBrowserModel || !browserLookupKey.trim()) {
+      setBrowserMessage("Select a model and enter a primary key value.");
+      return;
+    }
+    try {
+      const response = await fetch(`${API_BASE_URL}/outbound/${selectedBrowserModel}/${encodeURIComponent(browserLookupKey.trim())}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(data?.detail || "Lookup failed");
+      }
+      setBrowserLookupRecord(data.data);
+      setBrowserMessage(`Record loaded for ${browserLookupKey.trim()}.`);
+    } catch (err) {
+      setBrowserLookupRecord(null);
+      setBrowserMessage(err instanceof Error ? err.message : "Lookup failed");
     }
   }
 
@@ -419,7 +575,8 @@ function App() {
       description: "",
       source_system: "",
       allowed_directions: ["inbound", "outbound"],
-      allowed_models: "",
+      allowed_model_scope: "all",
+      allowed_models: [],
       expires_at: "",
       is_active: true,
     });
@@ -433,7 +590,8 @@ function App() {
       description: apiKey.description || "",
       source_system: apiKey.source_system || "",
       allowed_directions: apiKey.allowed_directions,
-      allowed_models: apiKey.allowed_models?.join(", ") || "",
+      allowed_model_scope: apiKey.allowed_models?.length ? "selected" : "all",
+      allowed_models: apiKey.allowed_models || [],
       expires_at: apiKey.expires_at ? apiKey.expires_at.slice(0, 16) : "",
       is_active: apiKey.is_active,
     });
@@ -448,9 +606,10 @@ function App() {
       description: apiKeyForm.description || null,
       source_system: apiKeyForm.source_system || null,
       allowed_directions: apiKeyForm.allowed_directions,
-      allowed_models: apiKeyForm.allowed_models
-        ? apiKeyForm.allowed_models.split(",").map((item) => item.trim()).filter(Boolean)
-        : null,
+      allowed_models:
+        apiKeyForm.allowed_model_scope === "selected"
+          ? apiKeyForm.allowed_models
+          : null,
       expires_at: apiKeyForm.expires_at ? new Date(apiKeyForm.expires_at).toISOString() : null,
       is_active: apiKeyForm.is_active,
     };
@@ -886,6 +1045,49 @@ function App() {
     }
   }
 
+  function startTypeBTemplate(templateName) {
+    const templates = {
+      supplier: {
+        name: "supplier",
+        display_name: "Supplier",
+        category: "procurement",
+        source_system: "JDE ERP",
+        owner_department: "Procurement",
+        primary_key: "supplier_code",
+        description: "Supplier master data linked from JDE staging data",
+        business_definition: "A business entity that provides goods or services.",
+      },
+      purchase_order_summary: {
+        name: "purchase_order_summary",
+        display_name: "Purchase Order Summary",
+        category: "procurement",
+        source_system: "JDE ERP",
+        owner_department: "Procurement",
+        primary_key: "po_no",
+        description: "Curated purchase order summary linked from JDE procurement staging view",
+        business_definition: "One governed row per purchase order with supplier, line, and invoice summary fields.",
+      },
+    };
+    const template = templates[templateName] || {};
+    setEditingId(null);
+    setForm({
+      ...emptyDataModel,
+      ...template,
+      type: "B",
+      attributes: [{ ...emptyAttribute, source_schema: "mdp_staging" }],
+    });
+    setModelMessage("Select the source table or view, then generate attributes from source columns.");
+    setPage("data-models");
+  }
+
+  function openModelInBrowser(modelName) {
+    setSelectedBrowserModel(modelName);
+    setBrowserAppliedFilters([]);
+    setBrowserLookupRecord(null);
+    setBrowserMessage("");
+    setPage("data-browser");
+  }
+
   if (!token) {
     return (
       <main className="auth-page">
@@ -923,156 +1125,209 @@ function App() {
   }
 
   return (
-    <main className="dashboard">
-      <section className="dashboard__header">
+    <main className="admin-shell">
+      <aside className="admin-sidebar">
         <div>
           <p className="eyebrow">Manufacturing Data Platform</p>
-          <h1>
-            {page === "dashboard"
-              ? "Operations Dashboard"
-              : page === "data-models"
-                ? "Data Models"
-                : page === "data-browser"
-                  ? "Data Browser"
-                  : page === "api-keys"
-                    ? "API Keys"
-                    : page === "connections"
-                      ? "Connections"
-                      : page === "demo-data"
-                        ? "Demo Data"
-                        : page === "db-browser"
-                          ? "DB Browser"
-                          : "Transactions"}
-          </h1>
-          <p className="summary">
-            Authenticated workspace for configurable manufacturing data services.
-          </p>
+          <h2>Admin MVP</h2>
         </div>
-        <div className="top-actions">
-          <button type="button" onClick={() => setPage("dashboard")}>
-            Dashboard
-          </button>
-          <button type="button" onClick={() => setPage("data-models")}>
-            Data Models
-          </button>
-          <button type="button" onClick={() => setPage("data-browser")}>
-            Data Browser
-          </button>
-          <button type="button" onClick={() => setPage("api-keys")}>
-            API Keys
-          </button>
-          <button type="button" onClick={() => setPage("connections")}>
-            Connections
-          </button>
-          <button type="button" onClick={() => setPage("demo-data")}>
-            Demo Data
-          </button>
-          <button type="button" onClick={() => setPage("db-browser")}>
-            DB Browser
-          </button>
-          <button type="button" onClick={() => setPage("transactions")}>
-            Transactions
-          </button>
-          <button className="secondary-button" type="button" onClick={handleLogout}>
-            Logout
-          </button>
-        </div>
-      </section>
+        <nav className="side-nav" aria-label="Admin navigation">
+          {navItems.map(([key, label]) => (
+            <button
+              className={page === key ? "side-nav__item side-nav__item--active" : "side-nav__item"}
+              key={key}
+              type="button"
+              onClick={() => setPage(key)}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
+      </aside>
 
-      {page === "dashboard" ? (
-        <Dashboard currentUser={currentUser} health={health} />
-      ) : page === "data-models" ? (
-        <DataModelsPage
-          dataModels={dataModels}
-          form={form}
-          setForm={setForm}
-          editingId={editingId}
-          authHeaders={authHeaders}
-          modelMessage={modelMessage}
-          saveDataModel={saveDataModel}
-          resetForm={resetForm}
-          editModel={editModel}
-          deactivateModel={deactivateModel}
-          updateAttribute={updateAttribute}
-          addAttribute={addAttribute}
-          removeAttribute={removeAttribute}
-        />
-      ) : page === "data-browser" ? (
-        <DataBrowserPage
-          models={browserModels}
-          selectedModel={selectedBrowserModel}
-          setSelectedModel={setSelectedBrowserModel}
-          limit={browserLimit}
-          setLimit={setBrowserLimit}
-          offset={browserOffset}
-          setOffset={setBrowserOffset}
-          filters={browserFilters}
-          setFilters={setBrowserFilters}
-          records={browserRecords}
-          message={browserMessage}
-          loadRecords={loadBrowserRecords}
-        />
-      ) : page === "api-keys" ? (
-        <ApiKeysPage
-          apiKeys={apiKeys}
-          form={apiKeyForm}
-          setForm={setApiKeyForm}
-          editingId={editingApiKeyId}
-          createdPlainApiKey={createdPlainApiKey}
-          message={apiKeyMessage}
-          saveApiKey={saveApiKey}
-          resetForm={resetApiKeyForm}
-          editApiKey={editApiKey}
-          deactivateApiKey={deactivateApiKey}
-        />
-      ) : page === "connections" ? (
-        <ConnectionsPage
-          connections={connections}
-          form={connectionForm}
-          setForm={setConnectionForm}
-          editingId={editingConnectionId}
-          message={connectionMessage}
-          saveConnection={saveConnection}
-          resetForm={resetConnectionForm}
-          editConnection={editConnection}
-          deactivateConnection={deactivateConnection}
-          testConnection={testConnection}
-        />
-      ) : page === "demo-data" ? (
-        <DemoDataPage
-          counts={demoCounts}
-          message={demoMessage}
-          seedDemoData={seedDemoData}
-          loadDemoSummary={loadDemoSummary}
-        />
-      ) : page === "db-browser" ? (
-        <DbBrowserPage
-          schemas={dbSchemas}
-          selectedSchema={selectedDbSchema}
-          tables={dbTables}
-          selectedTable={selectedDbTable}
-          columns={dbColumns}
-          preview={dbPreview}
-          message={dbBrowserMessage}
-          isLoading={dbBrowserLoading}
-          onSchemaChange={handleDbSchemaChange}
-          onTableSelect={handleDbTableSelect}
-          onRefresh={refreshDbBrowser}
-        />
-      ) : (
-        <TransactionsPage
-          transactions={transactions}
-          expandedTransactionId={expandedTransactionId}
-          setExpandedTransactionId={setExpandedTransactionId}
-        />
-      )}
+      <section className="admin-main">
+        <header className="admin-topbar">
+          <div>
+            <p className="eyebrow">Admin Web UI</p>
+            <h1>{pageTitles[page] || "Transactions"}</h1>
+            <p className="summary">
+              Govern staging data, data models, APIs, access keys, and integration activity from one workspace.
+            </p>
+          </div>
+          <div className="user-menu">
+            <span>{currentUser?.full_name || currentUser?.username || "User"}</span>
+            <button className="secondary-button" type="button" onClick={handleLogout}>
+              Logout
+            </button>
+          </div>
+        </header>
+
+        {page === "dashboard" ? (
+          <Dashboard
+            currentUser={currentUser}
+            health={health}
+            dataModels={dataModels}
+            apiKeys={apiKeys}
+            connections={connections}
+            transactions={transactions}
+            demoCounts={demoCounts}
+            setPage={setPage}
+            startTypeBTemplate={startTypeBTemplate}
+          />
+        ) : page === "data-models" ? (
+          <DataModelsPage
+            dataModels={dataModels}
+            form={form}
+            setForm={setForm}
+            editingId={editingId}
+            authHeaders={authHeaders}
+            modelMessage={modelMessage}
+            modelFilters={modelFilters}
+            setModelFilters={setModelFilters}
+            saveDataModel={saveDataModel}
+            resetForm={resetForm}
+            editModel={editModel}
+            deactivateModel={deactivateModel}
+            openModelInBrowser={openModelInBrowser}
+            updateAttribute={updateAttribute}
+            addAttribute={addAttribute}
+            removeAttribute={removeAttribute}
+          />
+        ) : page === "data-browser" ? (
+          <DataBrowserPage
+            models={browserModels}
+            selectedModel={selectedBrowserModel}
+            setSelectedModel={(modelName) => {
+              setSelectedBrowserModel(modelName);
+              setBrowserAppliedFilters([]);
+              setBrowserLookupRecord(null);
+              setBrowserMessage("");
+            }}
+            limit={browserLimit}
+            setLimit={setBrowserLimit}
+            offset={browserOffset}
+            setOffset={setBrowserOffset}
+            filterField={browserFilterField}
+            setFilterField={setBrowserFilterField}
+            filterValue={browserFilterValue}
+            setFilterValue={setBrowserFilterValue}
+            appliedFilters={browserAppliedFilters}
+            addFilter={addBrowserFilter}
+            removeFilter={removeBrowserFilter}
+            lookupKey={browserLookupKey}
+            setLookupKey={setBrowserLookupKey}
+            lookupRecord={browserLookupRecord}
+            records={browserRecords}
+            message={browserMessage}
+            loadRecords={loadBrowserRecords}
+            loadRecordByKey={loadBrowserRecordByKey}
+          />
+        ) : page === "api-keys" ? (
+          <ApiKeysPage
+            apiKeys={apiKeys}
+            dataModels={dataModels}
+            form={apiKeyForm}
+            setForm={setApiKeyForm}
+            editingId={editingApiKeyId}
+            createdPlainApiKey={createdPlainApiKey}
+            message={apiKeyMessage}
+            saveApiKey={saveApiKey}
+            resetForm={resetApiKeyForm}
+            editApiKey={editApiKey}
+            deactivateApiKey={deactivateApiKey}
+          />
+        ) : page === "connections" ? (
+          <ConnectionsPage
+            connections={connections}
+            form={connectionForm}
+            setForm={setConnectionForm}
+            editingId={editingConnectionId}
+            message={connectionMessage}
+            saveConnection={saveConnection}
+            resetForm={resetConnectionForm}
+            editConnection={editConnection}
+            deactivateConnection={deactivateConnection}
+            testConnection={testConnection}
+          />
+        ) : page === "demo-data" ? (
+          <DemoDataPage
+            counts={demoCounts}
+            message={demoMessage}
+            seedDemoData={seedDemoData}
+            loadDemoSummary={loadDemoSummary}
+          />
+        ) : page === "db-browser" ? (
+          <DbBrowserPage
+            schemas={dbSchemas}
+            selectedSchema={selectedDbSchema}
+            tables={dbTables}
+            selectedTable={selectedDbTable}
+            columns={dbColumns}
+            preview={dbPreview}
+            message={dbBrowserMessage}
+            isLoading={dbBrowserLoading}
+            onSchemaChange={handleDbSchemaChange}
+            onTableSelect={handleDbTableSelect}
+            onRefresh={refreshDbBrowser}
+          />
+        ) : page === "users" ? (
+          <UsersPage users={users} message={usersMessage} loadUsers={loadUsers} />
+        ) : (
+          <TransactionsPage
+            transactions={transactions}
+            dataModels={dataModels}
+            filters={transactionFilters}
+            setFilters={setTransactionFilters}
+            expandedTransactionId={expandedTransactionId}
+            setExpandedTransactionId={setExpandedTransactionId}
+          />
+        )}
+      </section>
     </main>
   );
 }
 
-function Dashboard({ currentUser, health }) {
+function Dashboard({
+  currentUser,
+  health,
+  dataModels,
+  apiKeys,
+  connections,
+  transactions,
+  demoCounts,
+  setPage,
+  startTypeBTemplate,
+}) {
+  const typeAModels = dataModels.filter((model) => model.type === "A");
+  const typeBModels = dataModels.filter((model) => model.type === "B");
+  const inboundToday = transactions.filter(
+    (transaction) => transaction.direction === "inbound" && isToday(transaction.created_at),
+  ).length;
+  const outboundToday = transactions.filter(
+    (transaction) => transaction.direction === "outbound" && isToday(transaction.created_at),
+  ).length;
+  const failedTransactions = transactions.filter((transaction) => transaction.status === "failed").length;
+  const metrics = [
+    ["Total data models", dataModels.length],
+    ["Type A models", typeAModels.length],
+    ["Type B models", typeBModels.length],
+    ["Active API keys", apiKeys.filter((apiKey) => apiKey.is_active).length],
+    ["Active connections", connections.filter((connection) => connection.status === "active").length],
+    ["Inbound today", inboundToday],
+    ["Outbound today", outboundToday],
+    ["Failed transactions", failedTransactions],
+  ];
+
   return (
-    <section className="panel-grid">
+    <section className="dashboard-grid">
+      <article className="status-panel status-panel--wide">
+        <p className="panel-label">MVP Value</p>
+        <h2>Govern ERP and staging data through reusable APIs</h2>
+        <p className="helper-text">
+          Browse migrated procurement data, model it as Type A or Type B, expose outbound APIs, issue scoped API keys, and monitor every integration call.
+        </p>
+      </article>
+
       <article className="status-panel" aria-label="Current user">
         <p className="panel-label">Current User</p>
         <h2>{currentUser?.full_name || currentUser?.username || "Loading..."}</h2>
@@ -1095,6 +1350,39 @@ function Dashboard({ currentUser, health }) {
           {health ? health.status : "unavailable"}
         </span>
       </article>
+
+      {metrics.map(([label, value]) => (
+        <article className="metric-card" key={label}>
+          <p className="panel-label">{label}</p>
+          <h2>{value}</h2>
+        </article>
+      ))}
+
+      <article className="status-panel status-panel--wide">
+        <p className="panel-label">Demo Seed</p>
+        <h2>{demoCounts ? "Procurement staging data ready" : "No demo summary loaded"}</h2>
+        <p className="helper-text">
+          {demoCounts
+            ? Object.entries(demoCounts).map(([table, count]) => `${table}: ${count}`).join(" | ")
+            : "Open Demo Data to seed or refresh the mock JDE procurement staging tables."}
+        </p>
+      </article>
+
+      <article className="quick-links status-panel--wide">
+        <p className="panel-label">Quick Links</p>
+        <div className="quick-link-grid">
+          <button type="button" onClick={() => startTypeBTemplate("supplier")}>
+            Create Type B Supplier Model
+          </button>
+          <button type="button" onClick={() => startTypeBTemplate("purchase_order_summary")}>
+            Create Type B Purchase Order Summary Model
+          </button>
+          <button type="button" onClick={() => setPage("db-browser")}>Open DB Browser</button>
+          <button type="button" onClick={() => setPage("data-browser")}>Open Data Browser</button>
+          <button type="button" onClick={() => setPage("api-keys")}>Create API Key</button>
+          <button type="button" onClick={() => setPage("transactions")}>View Transactions</button>
+        </div>
+      </article>
     </section>
   );
 }
@@ -1106,14 +1394,33 @@ function DataModelsPage({
   editingId,
   authHeaders,
   modelMessage,
+  modelFilters,
+  setModelFilters,
   saveDataModel,
   resetForm,
   editModel,
   deactivateModel,
+  openModelInBrowser,
   updateAttribute,
   addAttribute,
   removeAttribute,
 }) {
+  const filteredModels = dataModels.filter((model) => {
+    if (modelFilters.type !== "all" && model.type !== modelFilters.type) {
+      return false;
+    }
+    if (modelFilters.status !== "all" && model.status !== modelFilters.status) {
+      return false;
+    }
+    if (modelFilters.category !== "all" && (model.category || "") !== modelFilters.category) {
+      return false;
+    }
+    if (modelFilters.ai_enabled !== "all" && String(model.ai_enabled) !== modelFilters.ai_enabled) {
+      return false;
+    }
+    return true;
+  });
+
   return (
     <section className="data-model-layout">
       <form className="model-form" onSubmit={saveDataModel}>
@@ -1143,53 +1450,73 @@ function DataModelsPage({
               required
             />
           </label>
+          <div className="type-selector">
+            {[
+              ["A", "Type A", "Receives flat JSON and creates a physical PostgreSQL table."],
+              ["B", "Type B", "Links to an existing staging table or view."],
+            ].map(([type, label, description]) => (
+              <button
+                className={form.type === type ? "type-card type-card--active" : "type-card"}
+                key={type}
+                type="button"
+                onClick={() => {
+                  setForm({
+                    ...form,
+                    type,
+                    attributes: form.attributes.map((attribute) => ({
+                      ...attribute,
+                      source_schema: type === "B" ? attribute.source_schema || "" : "",
+                      source_table: type === "B" ? attribute.source_table || "" : "",
+                      source_column: type === "B" ? attribute.source_column || "" : "",
+                    })),
+                  });
+                }}
+              >
+                <strong>{label}</strong>
+                <span>{description}</span>
+              </button>
+            ))}
+          </div>
           <label>
-            Type
+            Category
             <select
-              value={form.type}
-              onChange={(event) => {
-                const type = event.target.value;
-                setForm({
-                  ...form,
-                  type,
-                  attributes: form.attributes.map((attribute) => ({
-                    ...attribute,
-                    source_schema: type === "B" ? attribute.source_schema || "" : "",
-                    source_table: type === "B" ? attribute.source_table || "" : "",
-                    source_column: type === "B" ? attribute.source_column || "" : "",
-                  })),
-                });
-              }}
+              value={form.category || ""}
+              onChange={(event) => setForm({ ...form, category: event.target.value })}
             >
-              <option value="A">Type A: Ingested Model</option>
-              <option value="B">Type B: Linked Model</option>
+              {categoryOptions.map((option) => (
+                <option key={option || "empty"} value={option}>
+                  {option || "Uncategorized"}
+                </option>
+              ))}
             </select>
           </label>
           <label>
-            Category
-            <input
-              value={form.category || ""}
-              onChange={(event) => setForm({ ...form, category: event.target.value })}
-              placeholder="finance"
-            />
-          </label>
-          <label>
             Owner Department
-            <input
+            <select
               value={form.owner_department || ""}
               onChange={(event) =>
                 setForm({ ...form, owner_department: event.target.value })
               }
-              placeholder="Finance"
-            />
+            >
+              {ownerDepartmentOptions.map((option) => (
+                <option key={option || "empty"} value={option}>
+                  {option || "Unassigned"}
+                </option>
+              ))}
+            </select>
           </label>
           <label>
             Source System
-            <input
+            <select
               value={form.source_system || ""}
               onChange={(event) => setForm({ ...form, source_system: event.target.value })}
-              placeholder="External API"
-            />
+            >
+              {sourceSystemOptions.map((option) => (
+                <option key={option || "empty"} value={option}>
+                  {option || "Unspecified"}
+                </option>
+              ))}
+            </select>
           </label>
         </div>
 
@@ -1230,10 +1557,9 @@ function DataModelsPage({
                 setForm({ ...form, sensitivity_level: event.target.value })
               }
             >
-              <option value="public">public</option>
-              <option value="internal">internal</option>
-              <option value="confidential">confidential</option>
-              <option value="restricted">restricted</option>
+              {sensitivityOptions.map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
             </select>
           </label>
         </div>
@@ -1344,45 +1670,93 @@ function DataModelsPage({
         {modelMessage && <p className="form-message">{modelMessage}</p>}
       </form>
 
-      <section className="model-list">
-        {dataModels.map((model) => (
-          <article className="model-item" key={model.id}>
-            <div>
-              <p className="panel-label">
-                Type {model.type} · {model.status}
-              </p>
-              <h2>{model.display_name}</h2>
-              <p>{model.name}</p>
-              <p>{model.description || "No description"}</p>
-              {model.generated_table && (
-                <p className="table-name">{model.generated_table}</p>
-              )}
-              {model.type === "B" && model.source_schema && model.source_table && (
-                <p className="table-name">
-                  {model.source_schema}.{model.source_table}
-                </p>
-              )}
-              {model.type === "A" && (
-                <p className="table-name">POST /inbound/{model.name}</p>
-              )}
-              {model.type === "B" && (
-                <p className="table-name">GET /data-models/{model.id}/mapped-preview</p>
-              )}
-            </div>
-            <div className="item-actions">
-              <button type="button" onClick={() => editModel(model)}>
-                View/Edit
-              </button>
-              <button
-                type="button"
-                onClick={() => deactivateModel(model.id)}
-                disabled={model.status === "inactive"}
-              >
-                Deactivate
-              </button>
-            </div>
-          </article>
-        ))}
+      <section className="model-list table-panel">
+        <div className="section-heading">
+          <div>
+            <p className="panel-label">Catalog</p>
+            <h2>{filteredModels.length} data models</h2>
+          </div>
+        </div>
+        <div className="filter-bar">
+          <label>
+            Type
+            <select value={modelFilters.type} onChange={(event) => setModelFilters({ ...modelFilters, type: event.target.value })}>
+              <option value="all">All</option>
+              <option value="A">Type A</option>
+              <option value="B">Type B</option>
+            </select>
+          </label>
+          <label>
+            Status
+            <select value={modelFilters.status} onChange={(event) => setModelFilters({ ...modelFilters, status: event.target.value })}>
+              <option value="all">All</option>
+              <option value="active">active</option>
+              <option value="inactive">inactive</option>
+            </select>
+          </label>
+          <label>
+            Category
+            <select value={modelFilters.category} onChange={(event) => setModelFilters({ ...modelFilters, category: event.target.value })}>
+              <option value="all">All</option>
+              {categoryOptions.filter(Boolean).map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            AI Enabled
+            <select value={modelFilters.ai_enabled} onChange={(event) => setModelFilters({ ...modelFilters, ai_enabled: event.target.value })}>
+              <option value="all">All</option>
+              <option value="true">true</option>
+              <option value="false">false</option>
+            </select>
+          </label>
+        </div>
+        <div className="browser-results">
+          <table>
+            <thead>
+              <tr>
+                <th>Display Name</th>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Category</th>
+                <th>Status</th>
+                <th>Source / Generated Storage</th>
+                <th>Primary Key</th>
+                <th>AI Enabled</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredModels.map((model) => (
+                <tr key={model.id}>
+                  <td>{model.display_name}</td>
+                  <td>{model.name}</td>
+                  <td>Type {model.type}</td>
+                  <td>{model.category || "-"}</td>
+                  <td>{model.status}</td>
+                  <td className="table-name">{getModelSource(model)}</td>
+                  <td>{model.primary_key || "-"}</td>
+                  <td>{String(model.ai_enabled)}</td>
+                  <td>
+                    <div className="inline-actions">
+                      <button type="button" onClick={() => editModel(model)}>View</button>
+                      <button type="button" onClick={() => editModel(model)}>Edit</button>
+                      <button type="button" onClick={() => openModelInBrowser(model.name)}>Preview</button>
+                      <button
+                        type="button"
+                        onClick={() => deactivateModel(model.id)}
+                        disabled={model.status === "inactive"}
+                      >
+                        Deactivate
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
     </section>
   );
@@ -1716,7 +2090,7 @@ function TypeBMappingDesigner({
             <option value="">Select table or view</option>
             {tables.map((table) => (
               <option key={table.table_name} value={table.table_name}>
-                {table.table_name} ({table.table_type})
+                {table.table_name} - {table.table_type}
               </option>
             ))}
           </select>
@@ -1821,6 +2195,9 @@ function TypeBMappingDesigner({
       </div>
 
       <p className="helper-text">
+        Source columns are mapped to data model attributes. Attribute names may differ from source column names.
+      </p>
+      <p className="helper-text">
         Preview returns data using model attribute names, not source column names.
       </p>
       <p className="helper-text">
@@ -1888,19 +2265,89 @@ function MessageList({ title, items, type }) {
 
 function TransactionsPage({
   transactions,
+  dataModels,
+  filters,
+  setFilters,
   expandedTransactionId,
   setExpandedTransactionId,
 }) {
+  const modelById = Object.fromEntries(dataModels.map((model) => [model.id, model]));
+  const filteredTransactions = transactions.filter((transaction) => {
+    if (filters.direction !== "all" && transaction.direction !== filters.direction) {
+      return false;
+    }
+    if (filters.protocol !== "all" && transaction.protocol !== filters.protocol) {
+      return false;
+    }
+    if (filters.status !== "all" && transaction.status !== filters.status) {
+      return false;
+    }
+    if (filters.data_model_id !== "all" && transaction.data_model_id !== filters.data_model_id) {
+      return false;
+    }
+    if (filters.auth_type !== "all" && transaction.auth_type !== filters.auth_type) {
+      return false;
+    }
+    return true;
+  });
+
   return (
     <section className="transactions-panel">
-      <div className="table-header">
+      <div className="filter-bar model-form">
+        <label>
+          Direction
+          <select value={filters.direction} onChange={(event) => setFilters({ ...filters, direction: event.target.value })}>
+            <option value="all">All</option>
+            <option value="inbound">inbound</option>
+            <option value="outbound">outbound</option>
+          </select>
+        </label>
+        <label>
+          Protocol
+          <select value={filters.protocol} onChange={(event) => setFilters({ ...filters, protocol: event.target.value })}>
+            <option value="all">All</option>
+            <option value="rest">rest</option>
+            <option value="mqtt">mqtt</option>
+          </select>
+        </label>
+        <label>
+          Status
+          <select value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}>
+            <option value="all">All</option>
+            <option value="success">success</option>
+            <option value="failed">failed</option>
+          </select>
+        </label>
+        <label>
+          Data Model
+          <select value={filters.data_model_id} onChange={(event) => setFilters({ ...filters, data_model_id: event.target.value })}>
+            <option value="all">All</option>
+            {dataModels.map((model) => (
+              <option key={model.id} value={model.id}>{model.display_name} ({model.name})</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Auth Type
+          <select value={filters.auth_type} onChange={(event) => setFilters({ ...filters, auth_type: event.target.value })}>
+            <option value="all">All</option>
+            <option value="jwt">jwt</option>
+            <option value="api_key">api_key</option>
+          </select>
+        </label>
+      </div>
+      <div className="transaction-header">
         <span>Created</span>
         <span>Direction</span>
         <span>Protocol</span>
         <span>Endpoint</span>
         <span>Status</span>
+        <span>Auth</span>
+        <span>Source</span>
+        <span>Model</span>
+        <span>Error</span>
       </div>
-      {transactions.map((transaction) => (
+      {filteredTransactions.map((transaction) => (
         <article className="transaction-row" key={transaction.id}>
           <button
             type="button"
@@ -1915,10 +2362,14 @@ function TransactionsPage({
             <span>{transaction.protocol}</span>
             <span>{transaction.endpoint || "-"}</span>
             <span>{transaction.status}</span>
+            <span>{transaction.auth_type || "-"}</span>
+            <span>{transaction.source_system || "-"}</span>
+            <span>{modelById[transaction.data_model_id]?.name || transaction.data_model_id || "-"}</span>
+            <span>{transaction.error_message || "-"}</span>
           </button>
           <div className="transaction-meta">
-            <span>{transaction.data_model_id || "-"}</span>
-            <span>{transaction.error_message || ""}</span>
+            <span>data_model_id: {transaction.data_model_id || "-"}</span>
+            <span>source_system: {transaction.source_system || "-"}</span>
           </div>
           {expandedTransactionId === transaction.id && (
             <pre>
@@ -1947,14 +2398,25 @@ function DataBrowserPage({
   setLimit,
   offset,
   setOffset,
-  filters,
-  setFilters,
+  filterField,
+  setFilterField,
+  filterValue,
+  setFilterValue,
+  appliedFilters,
+  addFilter,
+  removeFilter,
+  lookupKey,
+  setLookupKey,
+  lookupRecord,
   records,
   message,
   loadRecords,
+  loadRecordByKey,
 }) {
   const selected = models.find((model) => model.name === selectedModel);
+  const attributes = getModelAttributes(selected);
   const fields = records.length > 0 ? Object.keys(records[0]) : [];
+  const lookupFields = lookupRecord ? Object.keys(lookupRecord) : [];
 
   return (
     <section className="browser-panel">
@@ -1967,7 +2429,7 @@ function DataBrowserPage({
           >
             {models.map((model) => (
               <option key={model.id} value={model.name}>
-                {model.display_name}
+                {model.display_name} ({model.name}) - Type {model.type}
               </option>
             ))}
           </select>
@@ -1992,32 +2454,84 @@ function DataBrowserPage({
           />
         </label>
         <label>
-          Filters
+          Filter Attribute
+          <select value={filterField} onChange={(event) => setFilterField(event.target.value)}>
+            <option value="">Select attribute</option>
+            {attributes.map((attribute) => (
+              <option key={attribute} value={attribute}>{attribute}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Filter Value
           <input
-            value={filters}
-            onChange={(event) => setFilters(event.target.value)}
-            placeholder="country=VN&status=active"
+            value={filterValue}
+            onChange={(event) => setFilterValue(event.target.value)}
+            placeholder="VN"
           />
         </label>
+        <button type="button" onClick={addFilter}>Add Filter</button>
         <button type="submit">Load Records</button>
       </form>
 
       {selected && (
-        <div className="browser-endpoints">
-          <p className="table-name">Type {selected.type}</p>
+        <div className="browser-endpoints model-form">
+          <div className="section-heading">
+            <div>
+              <p className="panel-label">Outbound API</p>
+              <h2>{selected.display_name}</h2>
+            </div>
+            <span className="status-pill">Type {selected.type}</span>
+          </div>
+          <p className="table-name">Primary key: {selected.primary_key || "-"}</p>
           <p className="table-name">GET /outbound/{selected.name}</p>
-          <p className="table-name">
-            GET /outbound/{selected.name}/{selected.primary_key || "primary_key_value"}
-          </p>
-          {selected.type === "B" && selected.source_schema && selected.source_table && (
-            <p className="table-name">
-              Source: {selected.source_schema}.{selected.source_table}
-            </p>
+          <p className="table-name">GET /outbound/{selected.name}/{selected.primary_key || "primary_key_value"}</p>
+          {selected.type === "B" && <p className="table-name">Source: {getModelSource(selected)}</p>}
+          {appliedFilters.length > 0 && (
+            <div className="filter-chips">
+              {appliedFilters.map((filter) => (
+                <button key={filter.field} type="button" onClick={() => removeFilter(filter.field)}>
+                  {filter.field}={filter.value} x
+                </button>
+              ))}
+            </div>
           )}
+          <form className="lookup-row" onSubmit={loadRecordByKey}>
+            <label>
+              Lookup by key
+              <input
+                value={lookupKey}
+                onChange={(event) => setLookupKey(event.target.value)}
+                placeholder={selected.primary_key || "primary key value"}
+              />
+            </label>
+            <button type="submit">Lookup</button>
+          </form>
         </div>
       )}
 
       {message && <p className="form-message">{message}</p>}
+
+      {lookupRecord && (
+        <div className="browser-results">
+          <table>
+            <thead>
+              <tr>
+                {lookupFields.map((field) => (
+                  <th key={field}>{field}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                {lookupFields.map((field) => (
+                  <td key={field}>{JSON.stringify(lookupRecord[field])}</td>
+                ))}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <div className="browser-results">
         {records.length > 0 ? (
@@ -2049,6 +2563,7 @@ function DataBrowserPage({
 
 function ApiKeysPage({
   apiKeys,
+  dataModels,
   form,
   setForm,
   editingId,
@@ -2066,6 +2581,13 @@ function ApiKeysPage({
     setForm({ ...form, allowed_directions: next });
   }
 
+  function toggleAllowedModel(modelName) {
+    const next = form.allowed_models.includes(modelName)
+      ? form.allowed_models.filter((item) => item !== modelName)
+      : [...form.allowed_models, modelName];
+    setForm({ ...form, allowed_models: next });
+  }
+
   return (
     <section className="api-keys-layout">
       <form className="model-form" onSubmit={saveApiKey}>
@@ -2080,11 +2602,27 @@ function ApiKeysPage({
           </label>
           <label>
             Source System
-            <input value={form.source_system} onChange={(event) => setForm({ ...form, source_system: event.target.value })} placeholder="ERP" />
+            <select value={form.source_system} onChange={(event) => setForm({ ...form, source_system: event.target.value })}>
+              {apiKeySourceSystems.map((option) => (
+                <option key={option || "empty"} value={option}>{option || "Unspecified"}</option>
+              ))}
+            </select>
           </label>
           <label>
-            Allowed Models
-            <input value={form.allowed_models} onChange={(event) => setForm({ ...form, allowed_models: event.target.value })} placeholder="invoice, quality_result" />
+            Access Scope
+            <select
+              value={form.allowed_model_scope}
+              onChange={(event) =>
+                setForm({
+                  ...form,
+                  allowed_model_scope: event.target.value,
+                  allowed_models: event.target.value === "all" ? [] : form.allowed_models,
+                })
+              }
+            >
+              <option value="all">All Models</option>
+              <option value="selected">Selected Models</option>
+            </select>
           </label>
           <label>
             Expires At
@@ -2109,6 +2647,21 @@ function ApiKeysPage({
             Active
           </label>
         </div>
+        {form.allowed_model_scope === "selected" && (
+          <div className="multi-select-panel">
+            <p className="panel-label">Allowed Models</p>
+            {dataModels.filter((model) => model.status === "active").map((model) => (
+              <label className="compact-check" key={model.id}>
+                <input
+                  type="checkbox"
+                  checked={form.allowed_models.includes(model.name)}
+                  onChange={() => toggleAllowedModel(model.name)}
+                />
+                {model.display_name} ({model.name}) - Type {model.type}
+              </label>
+            ))}
+          </div>
+        )}
         <button className="primary-button" type="submit">{editingId ? "Update API Key" : "Create API Key"}</button>
         {createdPlainApiKey && (
           <div className="secret-panel">
@@ -2123,10 +2676,10 @@ function ApiKeysPage({
         {apiKeys.map((apiKey) => (
           <article className="model-item" key={apiKey.id}>
             <div>
-              <p className="panel-label">{apiKey.key_prefix} · {apiKey.is_active ? "active" : "inactive"}</p>
+              <p className="panel-label">{apiKey.key_prefix} - {apiKey.is_active ? "active" : "inactive"}</p>
               <h2>{apiKey.name}</h2>
               <p>{apiKey.source_system || "No source system"}</p>
-              <p>{apiKey.allowed_directions.join(", ")} · {apiKey.allowed_models?.join(", ") || "all models"}</p>
+              <p>{apiKey.allowed_directions.join(", ")} - {apiKey.allowed_models?.join(", ") || "all models"}</p>
             </div>
             <div className="item-actions">
               <button type="button" onClick={() => editApiKey(apiKey)}>Edit</button>
@@ -2423,6 +2976,53 @@ function DbBrowserPage({
             )}
           </div>
         </section>
+      </div>
+    </section>
+  );
+}
+
+function UsersPage({ users, message, loadUsers }) {
+  return (
+    <section className="browser-panel">
+      <div className="model-form">
+        <div className="section-heading">
+          <div>
+            <p className="panel-label">Access</p>
+            <h2>User management</h2>
+          </div>
+          <button type="button" onClick={loadUsers}>Refresh</button>
+        </div>
+        <p className="helper-text">
+          Human users authenticate with JWT. Fine-grained role permissions will be expanded in a later milestone.
+        </p>
+        {message && <p className="form-message">{message}</p>}
+      </div>
+
+      <div className="browser-results">
+        <table>
+          <thead>
+            <tr>
+              <th>Username</th>
+              <th>Email</th>
+              <th>Full Name</th>
+              <th>Role</th>
+              <th>Active</th>
+              <th>Created</th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.map((user) => (
+              <tr key={user.id}>
+                <td>{user.username}</td>
+                <td>{user.email}</td>
+                <td>{user.full_name || "-"}</td>
+                <td>{user.role}</td>
+                <td>{String(user.is_active)}</td>
+                <td>{new Date(user.created_at).toLocaleString()}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </section>
   );

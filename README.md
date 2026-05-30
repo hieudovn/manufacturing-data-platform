@@ -9,7 +9,7 @@ Manufacturing Data Platform is a Dockerized monorepo MVP foundation for configur
 - `postgres`: PostgreSQL 16 database with a named Docker volume
 - `pgadmin`: Optional database administration UI on port `5050`
 
-The frontend supports login, a protected dashboard, data model management, transaction viewing, data browsing, API key management, and connection management.
+The frontend supports login, a consolidated Admin UI, data model management, Type B mapping, DB browsing, outbound data browsing, API key management, transaction monitoring, connection management, demo data controls, and user viewing.
 
 Authentication is implemented with bcrypt password hashing and JWT bearer tokens. A default admin user is seeded on backend startup when no users exist.
 
@@ -69,6 +69,35 @@ docker compose down
 - Email: `admin@mdp.local`
 - Password: `admin123`
 - Role: `admin`
+
+## Admin Web UI
+
+The Admin Web UI at `http://localhost:3000` is the main MVP demo workspace. It uses a sidebar layout with:
+
+- Dashboard
+- Data Models
+- DB Browser
+- Data Browser
+- API Keys
+- Transactions
+- Connections
+- Demo Data
+- Users
+
+The dashboard summarizes data models, Type A/Type B split, active API keys, active connections, today's inbound/outbound transactions, failed transactions, and procurement demo seed status. It also includes quick links for creating the demo Type B Supplier and Purchase Order Summary models.
+
+Recommended demo flow:
+
+1. Open `Demo Data` and seed procurement staging data.
+2. Open `DB Browser` and inspect `mdp_staging` tables and `vw_jde_purchase_order_summary`.
+3. Open `Data Models` and create a Type B `supplier` model from `mdp_staging.stg_jde_supplier`.
+4. Create a Type B `purchase_order_summary` model from `mdp_staging.vw_jde_purchase_order_summary`.
+5. Open `Data Browser` and query saved models through `/outbound/{model_name}`.
+6. Open `API Keys` and create a scoped key for selected models and directions.
+7. Test outbound access with the API key.
+8. Open `Transactions` to review JWT/API-key activity and failures.
+
+The UI uses selectors for system-backed choices such as model type, schemas, tables/views, columns, data types, API key scope, directions, transaction filters, and connection types so demo users do not need to type internal identifiers manually.
 
 ## Backend
 
