@@ -256,24 +256,18 @@ h3 {
 }
 
 .sidebar-brand {
-  display: flex;
-  gap: 12px;
-  align-items: center;
+  display: block;
   padding-bottom: 18px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.sidebar-brand h2 {
-  color: #ffffff;
-  font-size: 1.02rem;
-}
-
-.sidebar-brand span {
+.sidebar-brand img {
   display: block;
-  margin-top: 2px;
-  color: #9ca3af;
-  font-size: 0.75rem;
-  line-height: 1.35;
+  width: 100%;
+  max-width: 210px;
+  padding: 10px;
+  border-radius: 10px;
+  background: #ffffff;
 }
 
 .side-nav {
@@ -455,6 +449,23 @@ h3 {
   display: grid;
   grid-template-columns: repeat(7, minmax(140px, 1fr));
   gap: 14px;
+}
+
+.solution-banner {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 22px;
+  border: 1px solid #e5e7eb;
+  border-left: 5px solid #d71920;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(17, 24, 39, 0.04);
+}
+
+.solution-banner h2 {
+  font-size: 1.35rem;
 }
 
 .section-card,
@@ -748,10 +759,51 @@ h3 {
 .direction-row,
 .item-actions,
 .inline-actions,
+.row-actions,
 .filter-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.row-actions {
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+
+.icon-action {
+  display: inline-grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  color: #4b5563;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.icon-action:hover {
+  border-color: #d71920;
+  color: #d71920;
+  background: #fff5f5;
+}
+
+.icon-action--danger:hover {
+  border-color: #b91c1c;
+  color: #b91c1c;
+  background: #fef2f2;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .attribute-row {
@@ -999,6 +1051,115 @@ h3 {
   grid-template-columns: minmax(280px, 0.34fr) minmax(0, 1fr);
 }
 
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  justify-items: end;
+  background: rgba(17, 24, 39, 0.42);
+}
+
+.drawer-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(90vw, 1180px);
+  height: 100vh;
+  background: #f5f6f8;
+  box-shadow: -24px 0 70px rgba(0, 0, 0, 0.22);
+}
+
+.drawer-header,
+.drawer-footer {
+  position: sticky;
+  z-index: 2;
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  border-color: #e5e7eb;
+  background: #ffffff;
+}
+
+.drawer-header {
+  top: 0;
+  padding: 18px 22px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.drawer-form {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-height: 0;
+}
+
+.drawer-body {
+  min-height: 0;
+  overflow: auto;
+  padding: 22px;
+}
+
+.drawer-footer {
+  bottom: 0;
+  padding: 14px 22px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.drawer-footer button {
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 10px 14px;
+  color: #111827;
+  background: #ffffff;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.drawer-footer .primary-button {
+  color: #ffffff;
+  background: #d71920;
+  border-color: #d71920;
+}
+
+.model-editor {
+  display: grid;
+  gap: 18px;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.detail-grid div {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #f9fafb;
+}
+
+.detail-grid span {
+  color: #6b7280;
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.detail-grid strong {
+  color: #111827;
+  font-size: 0.92rem;
+  overflow-wrap: anywhere;
+}
+
+.endpoint-grid {
+  display: grid;
+  gap: 8px;
+}
+
 @media (max-width: 1180px) {
   .kpi-grid {
     grid-template-columns: repeat(3, minmax(160px, 1fr));
@@ -1056,6 +1217,7 @@ h3 {
   .summary-grid,
   .quick-link-grid,
   .form-grid,
+  .detail-grid,
   .type-selector,
   .browser-controls,
   .filter-bar,
@@ -1066,5 +1228,9 @@ h3 {
 
   .attribute-row textarea {
     grid-column: auto;
+  }
+
+  .drawer-panel {
+    width: 100vw;
   }
 }

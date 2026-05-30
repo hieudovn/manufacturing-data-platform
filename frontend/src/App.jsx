@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import avenueLogo from "./avenue-logo.svg";
 import "./App.css";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
@@ -252,6 +253,70 @@ function EmptyState({ message }) {
   return <p className="empty-state">{message}</p>;
 }
 
+function ActionIcon({ name }) {
+  const commonProps = {
+    "aria-hidden": "true",
+    fill: "none",
+    height: "18",
+    stroke: "currentColor",
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    strokeWidth: "2",
+    viewBox: "0 0 24 24",
+    width: "18",
+  };
+  if (name === "eye") {
+    return (
+      <svg {...commonProps}>
+        <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z" />
+        <circle cx="12" cy="12" r="3" />
+      </svg>
+    );
+  }
+  if (name === "edit") {
+    return (
+      <svg {...commonProps}>
+        <path d="M12 20h9" />
+        <path d="m16.5 3.5 4 4L8 20H4v-4L16.5 3.5Z" />
+      </svg>
+    );
+  }
+  if (name === "preview") {
+    return (
+      <svg {...commonProps}>
+        <path d="M3 5h18" />
+        <path d="M3 12h18" />
+        <path d="M3 19h18" />
+        <path d="M8 5v14" />
+        <path d="m16 15 3 3" />
+        <circle cx="14" cy="13" r="3" />
+      </svg>
+    );
+  }
+  return (
+    <svg {...commonProps}>
+      <path d="M12 2v10" />
+      <path d="M18.4 6.6a9 9 0 1 1-12.8 0" />
+    </svg>
+  );
+}
+
+function IconActionButton({ label, icon, onClick, disabled = false, tone = "neutral" }) {
+  return (
+    <button
+      aria-label={label}
+      className={`icon-action icon-action--${tone}`}
+      disabled={disabled}
+      onClick={onClick}
+      title={label}
+      type="button"
+    >
+      <ActionIcon name={icon} />
+      <span className="sr-only">{label}</span>
+    </button>
+  );
+}
+
 const emptyConnection = {
   name: "",
   type: "postgresql",
@@ -351,6 +416,9 @@ function App() {
   const [form, setForm] = useState(emptyDataModel);
   const [editingId, setEditingId] = useState(null);
   const [modelMessage, setModelMessage] = useState("");
+  const [dataModelDrawerMode, setDataModelDrawerMode] = useState(null);
+  const [viewModel, setViewModel] = useState(null);
+  const [viewModelPreview, setViewModelPreview] = useState({ columns: [], rows: [] });
   const [modelFilters, setModelFilters] = useState({
     type: "all",
     status: "active",
@@ -999,7 +1067,21 @@ function App() {
     setModelMessage("");
   }
 
-  async function editModel(model) {
+  function closeDataModelDrawer() {
+    setDataModelDrawerMode(null);
+    setViewModel(null);
+    setViewModelPreview({ columns: [], rows: [] });
+    resetForm();
+  }
+
+  function openCreateModel() {
+    resetForm();
+    setViewModel(null);
+    setViewModelPreview({ columns: [], rows: [] });
+    setDataModelDrawerMode("create");
+  }
+
+  async function loadModelIntoDrawer(model, mode) {
     setModelMessage("");
     try {
       const response = await fetch(`${API_BASE_URL}/data-models/${model.id}`, {
@@ -1009,18 +1091,47 @@ function App() {
         throw new Error("Unable to load data model");
       }
       const detail = await response.json();
-      setEditingId(detail.id);
-      setForm({
+      const normalizedDetail = {
         ...emptyDataModel,
         ...detail,
         attributes: detail.attributes.map((attribute) => ({
           ...emptyAttribute,
           ...attribute,
         })),
-      });
+      };
+      setViewModel(normalizedDetail);
+      if (mode === "preview" && normalizedDetail.type === "B") {
+        const previewResponse = await fetch(`${API_BASE_URL}/data-models/${normalizedDetail.id}/mapped-preview?limit=20`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (previewResponse.ok) {
+          const previewData = await previewResponse.json();
+          const rows = previewData.data || [];
+          setViewModelPreview({ columns: rows.length ? Object.keys(rows[0]) : [], rows });
+        } else {
+          setViewModelPreview({ columns: [], rows: [] });
+        }
+      } else {
+        setViewModelPreview({ columns: [], rows: [] });
+      }
+      setEditingId(mode === "edit" ? detail.id : null);
+      setForm(normalizedDetail);
+      setDataModelDrawerMode(mode);
     } catch (err) {
       setModelMessage(err instanceof Error ? err.message : "Unable to load data model");
     }
+  }
+
+  function viewDataModel(model) {
+    loadModelIntoDrawer(model, "view");
+  }
+
+  function editModel(model) {
+    loadModelIntoDrawer(model, "edit");
+  }
+
+  function previewDataModel(model) {
+    loadModelIntoDrawer(model, "preview");
   }
 
   function updateAttribute(index, field, value) {
@@ -1100,12 +1211,12 @@ function App() {
         throw new Error(formatApiDetail(detail?.detail));
       }
 
-      resetForm();
       await loadDataModels();
       const warningText = validationWarnings.length
         ? ` Warnings: ${validationWarnings.map((warning) => warning.message).join(" ")}`
         : "";
       setModelMessage(`${editingId ? "Data model updated." : "Data model created."}${warningText}`);
+      closeDataModelDrawer();
     } catch (err) {
       setModelMessage(err instanceof Error ? err.message : "Save failed");
     }
@@ -1159,6 +1270,8 @@ function App() {
       type: "B",
       attributes: [{ ...emptyAttribute, source_schema: "mdp_staging" }],
     });
+    setViewModel(null);
+    setDataModelDrawerMode("create");
     setModelMessage("Select the source table or view, then generate attributes from source columns.");
     setPage("data-models");
   }
@@ -1221,11 +1334,7 @@ function App() {
     <main className="admin-shell">
       <aside className="admin-sidebar">
         <div className="sidebar-brand">
-          <div className="brand-mark brand-mark--small">A</div>
-          <div>
-            <h2>Avenue MDP</h2>
-            <span>Avenue Manufacturing Data Platform</span>
-          </div>
+          <img src={avenueLogo} alt="Avenue Business Solutions" />
         </div>
         <nav className="side-nav" aria-label="Admin navigation">
           {navGroups.map((group) => (
@@ -1295,7 +1404,14 @@ function App() {
             setModelFilters={setModelFilters}
             saveDataModel={saveDataModel}
             resetForm={resetForm}
+            drawerMode={dataModelDrawerMode}
+            viewModel={viewModel}
+            viewModelPreview={viewModelPreview}
+            openCreateModel={openCreateModel}
+            closeDataModelDrawer={closeDataModelDrawer}
+            viewDataModel={viewDataModel}
             editModel={editModel}
+            previewDataModel={previewDataModel}
             deactivateModel={deactivateModel}
             openModelInBrowser={openModelInBrowser}
             updateAttribute={updateAttribute}
@@ -1434,6 +1550,14 @@ function Dashboard({
 
   return (
     <section className="page-stack">
+      <section className="solution-banner">
+        <div>
+          <p className="panel-label">Solution Name</p>
+          <h2>Manufacturing Data Platform</h2>
+        </div>
+        <Badge tone="accent">Avenue MDP</Badge>
+      </section>
+
       <div className="kpi-grid">
         {metrics.map(([label, value]) => (
           <article className="metric-card" key={label}>
@@ -1563,7 +1687,14 @@ function DataModelsPage({
   setModelFilters,
   saveDataModel,
   resetForm,
+  drawerMode,
+  viewModel,
+  viewModelPreview,
+  openCreateModel,
+  closeDataModelDrawer,
+  viewDataModel,
   editModel,
+  previewDataModel,
   deactivateModel,
   openModelInBrowser,
   updateAttribute,
@@ -1587,282 +1718,16 @@ function DataModelsPage({
   });
 
   return (
-    <section className="data-model-layout">
-      <form className="model-form" onSubmit={saveDataModel}>
-        <div className="section-heading">
-          <p className="panel-label">{editingId ? "Edit Model" : "Create Model"}</p>
-          <button type="button" onClick={resetForm}>
-            New
-          </button>
-        </div>
-
-        <div className="form-grid">
-          <label>
-            Name
-            <input
-              value={form.name}
-              onChange={(event) => setForm({ ...form, name: event.target.value })}
-              placeholder="invoice"
-              required
-            />
-          </label>
-          <label>
-            Display Name
-            <input
-              value={form.display_name}
-              onChange={(event) => setForm({ ...form, display_name: event.target.value })}
-              placeholder="Invoice"
-              required
-            />
-          </label>
-          <div className="type-selector">
-            {[
-              ["A", "Type A", "Receives flat JSON and creates a physical PostgreSQL table."],
-              ["B", "Type B", "Links to an existing staging table or view."],
-            ].map(([type, label, description]) => (
-              <button
-                className={form.type === type ? "type-card type-card--active" : "type-card"}
-                key={type}
-                type="button"
-                onClick={() => {
-                  setForm({
-                    ...form,
-                    type,
-                    attributes: form.attributes.map((attribute) => ({
-                      ...attribute,
-                      source_schema: type === "B" ? attribute.source_schema || "" : "",
-                      source_table: type === "B" ? attribute.source_table || "" : "",
-                      source_column: type === "B" ? attribute.source_column || "" : "",
-                    })),
-                  });
-                }}
-              >
-                <strong>{label}</strong>
-                <span>{description}</span>
-              </button>
-            ))}
-          </div>
-          <label>
-            Category
-            <select
-              value={form.category || ""}
-              onChange={(event) => setForm({ ...form, category: event.target.value })}
-            >
-              {categoryOptions.map((option) => (
-                <option key={option || "empty"} value={option}>
-                  {option || "Uncategorized"}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Owner Department
-            <select
-              value={form.owner_department || ""}
-              onChange={(event) =>
-                setForm({ ...form, owner_department: event.target.value })
-              }
-            >
-              {ownerDepartmentOptions.map((option) => (
-                <option key={option || "empty"} value={option}>
-                  {option || "Unassigned"}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Source System
-            <select
-              value={form.source_system || ""}
-              onChange={(event) => setForm({ ...form, source_system: event.target.value })}
-            >
-              {sourceSystemOptions.map((option) => (
-                <option key={option || "empty"} value={option}>
-                  {option || "Unspecified"}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-
-        <label>
-          Description
-          <textarea
-            value={form.description || ""}
-            onChange={(event) => setForm({ ...form, description: event.target.value })}
-          />
-        </label>
-
-        {form.type === "B" && (
-          <label>
-            Business Definition
-            <textarea
-              value={form.business_definition || ""}
-              onChange={(event) =>
-                setForm({ ...form, business_definition: event.target.value })
-              }
-            />
-          </label>
-        )}
-
-        <div className="form-grid">
-          <label>
-            Primary Key
-            {form.type === "B" ? (
-              <select
-                value={form.primary_key || ""}
-                onChange={(event) => {
-                  const primaryKey = event.target.value;
-                  setForm({
-                    ...form,
-                    primary_key: primaryKey,
-                    attributes: form.attributes.map((attribute) => ({
-                      ...attribute,
-                      is_primary_key: attribute.name === primaryKey,
-                    })),
-                  });
-                }}
-              >
-                <option value="">Select primary key</option>
-                {form.attributes.filter((attribute) => attribute.name).map((attribute) => (
-                  <option key={attribute.name} value={attribute.name}>{attribute.name}</option>
-                ))}
-              </select>
-            ) : (
-              <input
-                value={form.primary_key || ""}
-                onChange={(event) => setForm({ ...form, primary_key: event.target.value })}
-                placeholder="invoice_no"
-              />
-            )}
-          </label>
-          <label>
-            Sensitivity
-            <select
-              value={form.sensitivity_level || "internal"}
-              onChange={(event) =>
-                setForm({ ...form, sensitivity_level: event.target.value })
-              }
-            >
-              {sensitivityOptions.map((option) => (
-                <option key={option} value={option}>{option}</option>
-              ))}
-            </select>
-          </label>
-        </div>
-
-        <label className="toggle-row">
-          <input
-            type="checkbox"
-            checked={form.ai_enabled}
-            onChange={(event) => setForm({ ...form, ai_enabled: event.target.checked })}
-          />
-          AI enabled
-        </label>
-
-        <p className="helper-text">
-          {form.type === "A"
-            ? "A PostgreSQL table will be generated automatically for Type A models."
-            : "Type B models do not create new tables. They expose existing staging tables or views as governed data models and APIs."}
-        </p>
-
-        {form.generated_table && (
-          <label>
-            Generated Table
-            <input value={form.generated_table} readOnly />
-          </label>
-        )}
-
-        {form.type === "B" ? (
-          <TypeBMappingDesigner
-            form={form}
-            setForm={setForm}
-            editingId={editingId}
-            authHeaders={authHeaders}
-            updateAttribute={updateAttribute}
-            removeAttribute={removeAttribute}
-          />
-        ) : (
-          <>
-            <div className="section-heading">
-              <p className="panel-label">Attributes</p>
-              <button type="button" onClick={addAttribute}>
-                Add Attribute
-              </button>
-            </div>
-
-            <div className="attribute-list">
-              {form.attributes.map((attribute, index) => (
-                <div className="attribute-row" key={index}>
-                  <input
-                    value={attribute.name}
-                    onChange={(event) => updateAttribute(index, "name", event.target.value)}
-                    placeholder="invoice_no"
-                    required
-                  />
-                  <input
-                    value={attribute.display_name || ""}
-                    onChange={(event) =>
-                      updateAttribute(index, "display_name", event.target.value)
-                    }
-                    placeholder="Invoice Number"
-                  />
-                  <select
-                    value={attribute.data_type}
-                    onChange={(event) => updateAttribute(index, "data_type", event.target.value)}
-                  >
-                    {dataTypeOptions.map((option) => (
-                      <option key={option} value={option}>{option}</option>
-                    ))}
-                  </select>
-                  <label className="compact-check">
-                    <input
-                      type="checkbox"
-                      checked={attribute.required}
-                      onChange={(event) =>
-                        updateAttribute(index, "required", event.target.checked)
-                      }
-                    />
-                    Required
-                  </label>
-                  <label className="compact-check">
-                    <input
-                      type="checkbox"
-                      checked={attribute.is_primary_key}
-                      onChange={(event) =>
-                        updateAttribute(index, "is_primary_key", event.target.checked)
-                      }
-                    />
-                    PK
-                  </label>
-                  <textarea
-                    value={attribute.description || ""}
-                    onChange={(event) =>
-                      updateAttribute(index, "description", event.target.value)
-                    }
-                    placeholder="Description"
-                  />
-                  <button type="button" onClick={() => removeAttribute(index)}>
-                    Remove
-                  </button>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-
-        <button className="primary-button" type="submit">
-          {editingId ? "Update Data Model" : "Create Data Model"}
-        </button>
-        {modelMessage && <p className="form-message">{modelMessage}</p>}
-      </form>
-
+    <section className="page-stack">
       <section className="model-list table-panel">
         <div className="section-heading">
           <div>
             <p className="panel-label">Catalog</p>
             <h2>{filteredModels.length} data models</h2>
           </div>
+          <button className="primary-button" type="button" onClick={openCreateModel}>
+            New Data Model
+          </button>
         </div>
         <div className="filter-bar">
           <label>
@@ -1926,17 +1791,17 @@ function DataModelsPage({
                   <td>{model.primary_key || "-"}</td>
                   <td>{String(model.ai_enabled)}</td>
                   <td>
-                    <div className="inline-actions">
-                      <button type="button" onClick={() => editModel(model)}>View</button>
-                      <button type="button" onClick={() => editModel(model)}>Edit</button>
-                      <button type="button" onClick={() => openModelInBrowser(model.name)}>Preview</button>
-                      <button
-                        type="button"
+                    <div className="row-actions" aria-label={`Actions for ${model.name}`}>
+                      <IconActionButton label="View" icon="eye" onClick={() => viewDataModel(model)} />
+                      <IconActionButton label="Edit" icon="edit" onClick={() => editModel(model)} />
+                      <IconActionButton label="Preview" icon="preview" onClick={() => previewDataModel(model)} />
+                      <IconActionButton
+                        label="Deactivate"
+                        icon="deactivate"
                         onClick={() => deactivateModel(model.id)}
                         disabled={model.status === "inactive"}
-                      >
-                        Deactivate
-                      </button>
+                        tone="danger"
+                      />
                     </div>
                   </td>
                 </tr>
@@ -1945,7 +1810,418 @@ function DataModelsPage({
           </table>
         </div>
       </section>
+
+      {drawerMode && (
+        <DataModelDrawer
+          mode={drawerMode}
+          model={viewModel || form}
+          form={form}
+          setForm={setForm}
+          editingId={editingId}
+          authHeaders={authHeaders}
+          modelMessage={modelMessage}
+          saveDataModel={saveDataModel}
+          closeDataModelDrawer={closeDataModelDrawer}
+          editModel={editModel}
+          preview={viewModelPreview}
+          updateAttribute={updateAttribute}
+          addAttribute={addAttribute}
+          removeAttribute={removeAttribute}
+        />
+      )}
     </section>
+  );
+}
+
+function DataModelDrawer({
+  mode,
+  model,
+  form,
+  setForm,
+  editingId,
+  authHeaders,
+  modelMessage,
+  saveDataModel,
+  closeDataModelDrawer,
+  editModel,
+  preview,
+  updateAttribute,
+  addAttribute,
+  removeAttribute,
+}) {
+  const isView = mode === "view";
+  const title = mode === "preview" ? "Preview Data Model" : isView ? "View Data Model" : mode === "edit" ? "Edit Data Model" : "Create Data Model";
+
+  return (
+    <div className="drawer-backdrop" role="dialog" aria-modal="true" aria-labelledby="data-model-drawer-title">
+      <section className="drawer-panel">
+        <header className="drawer-header">
+          <div>
+            <p className="panel-label">Data Models</p>
+            <h2 id="data-model-drawer-title">{title}</h2>
+          </div>
+          <button className="icon-button" type="button" onClick={closeDataModelDrawer} aria-label="Close data model dialog">
+            X
+          </button>
+        </header>
+
+        {isView || mode === "preview" ? (
+          <>
+            <div className="drawer-body">
+              <DataModelReadOnly model={model} preview={preview} />
+            </div>
+            <footer className="drawer-footer">
+              <button type="button" onClick={closeDataModelDrawer}>Close</button>
+              <button className="primary-button" type="button" onClick={() => editModel(model)}>
+                Edit Model
+              </button>
+            </footer>
+          </>
+        ) : (
+          <form className="drawer-form" onSubmit={saveDataModel}>
+            <div className="drawer-body">
+              <DataModelEditor
+                form={form}
+                setForm={setForm}
+                editingId={editingId}
+                authHeaders={authHeaders}
+                updateAttribute={updateAttribute}
+                addAttribute={addAttribute}
+                removeAttribute={removeAttribute}
+              />
+              {modelMessage && <p className="form-message">{modelMessage}</p>}
+            </div>
+            <footer className="drawer-footer">
+              <button type="button" onClick={closeDataModelDrawer}>Cancel</button>
+              <button className="primary-button" type="submit">
+                {mode === "edit" ? "Save Changes" : "Save Model"}
+              </button>
+            </footer>
+          </form>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function DataModelEditor({
+  form,
+  setForm,
+  editingId,
+  authHeaders,
+  updateAttribute,
+  addAttribute,
+  removeAttribute,
+}) {
+  return (
+    <div className="model-editor">
+      <SectionCard title="Basic Information" eyebrow={form.type === "B" ? "Linked Model" : "Ingested Model"}>
+        <div className="form-grid">
+          <label>
+            Name
+            <input
+              value={form.name}
+              onChange={(event) => setForm({ ...form, name: event.target.value })}
+              placeholder="invoice"
+              required
+            />
+          </label>
+          <label>
+            Display Name
+            <input
+              value={form.display_name}
+              onChange={(event) => setForm({ ...form, display_name: event.target.value })}
+              placeholder="Invoice"
+              required
+            />
+          </label>
+          <div className="type-selector">
+            {[
+              ["A", "Type A", "Receives flat JSON and creates a physical PostgreSQL table."],
+              ["B", "Type B", "Links to an existing staging table or view."],
+            ].map(([type, label, description]) => (
+              <button
+                className={form.type === type ? "type-card type-card--active" : "type-card"}
+                key={type}
+                type="button"
+                onClick={() => {
+                  setForm({
+                    ...form,
+                    type,
+                    attributes: form.attributes.map((attribute) => ({
+                      ...attribute,
+                      source_schema: type === "B" ? attribute.source_schema || "" : "",
+                      source_table: type === "B" ? attribute.source_table || "" : "",
+                      source_column: type === "B" ? attribute.source_column || "" : "",
+                    })),
+                  });
+                }}
+              >
+                <strong>{label}</strong>
+                <span>{description}</span>
+              </button>
+            ))}
+          </div>
+          <label>
+            Category
+            <select value={form.category || ""} onChange={(event) => setForm({ ...form, category: event.target.value })}>
+              {categoryOptions.map((option) => (
+                <option key={option || "empty"} value={option}>{option || "Uncategorized"}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Owner Department
+            <select value={form.owner_department || ""} onChange={(event) => setForm({ ...form, owner_department: event.target.value })}>
+              {ownerDepartmentOptions.map((option) => (
+                <option key={option || "empty"} value={option}>{option || "Unassigned"}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Source System
+            <select value={form.source_system || ""} onChange={(event) => setForm({ ...form, source_system: event.target.value })}>
+              {sourceSystemOptions.map((option) => (
+                <option key={option || "empty"} value={option}>{option || "Unspecified"}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Sensitivity
+            <select value={form.sensitivity_level || "internal"} onChange={(event) => setForm({ ...form, sensitivity_level: event.target.value })}>
+              {sensitivityOptions.map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Primary Key
+            {form.type === "B" ? (
+              <select
+                value={form.primary_key || ""}
+                onChange={(event) => {
+                  const primaryKey = event.target.value;
+                  setForm({
+                    ...form,
+                    primary_key: primaryKey,
+                    attributes: form.attributes.map((attribute) => ({
+                      ...attribute,
+                      is_primary_key: attribute.name === primaryKey,
+                    })),
+                  });
+                }}
+              >
+                <option value="">Select primary key</option>
+                {form.attributes.filter((attribute) => attribute.name).map((attribute) => (
+                  <option key={attribute.name} value={attribute.name}>{attribute.name}</option>
+                ))}
+              </select>
+            ) : (
+              <input
+                value={form.primary_key || ""}
+                onChange={(event) => setForm({ ...form, primary_key: event.target.value })}
+                placeholder="invoice_no"
+              />
+            )}
+          </label>
+        </div>
+
+        <label>
+          Description
+          <textarea value={form.description || ""} onChange={(event) => setForm({ ...form, description: event.target.value })} />
+        </label>
+
+        {form.type === "B" && (
+          <label>
+            Business Definition
+            <textarea value={form.business_definition || ""} onChange={(event) => setForm({ ...form, business_definition: event.target.value })} />
+          </label>
+        )}
+
+        <label className="toggle-row">
+          <input
+            type="checkbox"
+            checked={form.ai_enabled}
+            onChange={(event) => setForm({ ...form, ai_enabled: event.target.checked })}
+          />
+          AI enabled
+        </label>
+
+        <p className="helper-text">
+          {form.type === "A"
+            ? "A PostgreSQL table will be generated automatically for Type A models."
+            : "Type B models do not create new tables. They expose existing staging tables or views as governed data models and APIs."}
+        </p>
+      </SectionCard>
+
+      {form.generated_table && (
+        <SectionCard title="Generated Storage" eyebrow="Type A">
+          <p className="table-name">{form.generated_table}</p>
+        </SectionCard>
+      )}
+
+      {form.type === "B" ? (
+        <TypeBMappingDesigner
+          form={form}
+          setForm={setForm}
+          editingId={editingId}
+          authHeaders={authHeaders}
+          updateAttribute={updateAttribute}
+          removeAttribute={removeAttribute}
+        />
+      ) : (
+        <SectionCard
+          title="Attributes"
+          eyebrow="Type A Schema"
+          actions={<button type="button" onClick={addAttribute}>Add Attribute</button>}
+        >
+          <div className="attribute-list">
+            {form.attributes.map((attribute, index) => (
+              <div className="attribute-row" key={index}>
+                <input
+                  value={attribute.name}
+                  onChange={(event) => updateAttribute(index, "name", event.target.value)}
+                  placeholder="invoice_no"
+                  required
+                />
+                <input
+                  value={attribute.display_name || ""}
+                  onChange={(event) => updateAttribute(index, "display_name", event.target.value)}
+                  placeholder="Invoice Number"
+                />
+                <select value={attribute.data_type} onChange={(event) => updateAttribute(index, "data_type", event.target.value)}>
+                  {dataTypeOptions.map((option) => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+                <label className="compact-check">
+                  <input type="checkbox" checked={attribute.required} onChange={(event) => updateAttribute(index, "required", event.target.checked)} />
+                  Required
+                </label>
+                <label className="compact-check">
+                  <input type="checkbox" checked={attribute.is_primary_key} onChange={(event) => updateAttribute(index, "is_primary_key", event.target.checked)} />
+                  PK
+                </label>
+                <textarea
+                  value={attribute.description || ""}
+                  onChange={(event) => updateAttribute(index, "description", event.target.value)}
+                  placeholder="Description"
+                />
+                <button type="button" onClick={() => removeAttribute(index)}>Remove</button>
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+      )}
+    </div>
+  );
+}
+
+function DataModelReadOnly({ model, preview }) {
+  if (!model) {
+    return <EmptyState message="Data model details are loading." />;
+  }
+  const sourceAttribute = model.attributes?.find((attribute) => attribute.source_schema && attribute.source_table);
+  const sourceObject = model.source_schema && model.source_table
+    ? `${model.source_schema}.${model.source_table}`
+    : sourceAttribute
+      ? `${sourceAttribute.source_schema}.${sourceAttribute.source_table}`
+      : "-";
+
+  return (
+    <div className="model-editor">
+      <SectionCard title={model.display_name || model.name} eyebrow="Overview">
+        <div className="detail-grid">
+          <div><span>Name</span><strong>{model.name}</strong></div>
+          <div><span>Type</span><strong><Badge tone={badgeTone(model.type)}>Type {model.type}</Badge></strong></div>
+          <div><span>Category</span><strong>{model.category || "-"}</strong></div>
+          <div><span>Status</span><strong><Badge tone={badgeTone(model.status)}>{model.status || "-"}</Badge></strong></div>
+          <div><span>Primary Key</span><strong>{model.primary_key || "-"}</strong></div>
+          <div><span>Source System</span><strong>{model.source_system || "-"}</strong></div>
+          <div><span>Owner Department</span><strong>{model.owner_department || "-"}</strong></div>
+          <div><span>Sensitivity</span><strong>{model.sensitivity_level || "-"}</strong></div>
+          <div><span>AI Enabled</span><strong>{String(model.ai_enabled)}</strong></div>
+          <div><span>Storage / Source</span><strong className="table-name">{model.type === "A" ? model.generated_table || "-" : sourceObject}</strong></div>
+        </div>
+        {model.description && <p className="helper-text">{model.description}</p>}
+      </SectionCard>
+
+      <SectionCard title="API Endpoints" eyebrow="Governed Access">
+        <div className="endpoint-grid">
+          {model.type === "A" && <p className="table-name">POST /inbound/{model.name}</p>}
+          <p className="table-name">GET /outbound/{model.name}</p>
+          <p className="table-name">GET /outbound/{model.name}/{model.primary_key || "primary_key_value"}</p>
+          {model.type === "B" && <p className="table-name">GET /data-models/{model.id}/mapped-preview</p>}
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Attributes" eyebrow="Schema">
+        <div className="browser-results">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Display Name</th>
+                <th>Data Type</th>
+                <th>Required</th>
+                <th>Primary Key</th>
+                <th>Source Mapping</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(model.attributes || []).map((attribute) => (
+                <tr key={attribute.name}>
+                  <td>{attribute.name}</td>
+                  <td>{attribute.display_name || "-"}</td>
+                  <td><Badge tone="neutral">{attribute.data_type}</Badge></td>
+                  <td>{String(attribute.required)}</td>
+                  <td>{String(attribute.is_primary_key)}</td>
+                  <td className="table-name">
+                    {attribute.source_schema && attribute.source_table && attribute.source_column
+                      ? `${attribute.source_schema}.${attribute.source_table}.${attribute.source_column}`
+                      : "-"}
+                  </td>
+                  <td>{attribute.description || "-"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </SectionCard>
+
+      {model.type === "B" && (
+        <SectionCard title="Mapped Preview" eyebrow="Type B">
+          <p className="helper-text">
+            Preview rows use model attribute names from the saved mapping.
+          </p>
+          <div className="browser-results">
+            {preview?.rows?.length > 0 ? (
+              <table>
+                <thead>
+                  <tr>
+                    {preview.columns.map((column) => (
+                      <th key={column}>{column}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {preview.rows.map((row, index) => (
+                    <tr key={index}>
+                      {preview.columns.map((column) => (
+                        <td key={column}>{JSON.stringify(row[column])}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <EmptyState message="No mapped preview rows loaded for this model." />
+            )}
+          </div>
+        </SectionCard>
+      )}
+    </div>
   );
 }
 
