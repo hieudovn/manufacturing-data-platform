@@ -217,7 +217,8 @@ h2 {
 }
 
 .data-model-layout,
-.transactions-panel {
+.transactions-panel,
+.browser-panel {
   display: grid;
   gap: 24px;
   margin-top: 48px;
@@ -229,6 +230,10 @@ h2 {
 }
 
 .transactions-panel {
+  grid-template-columns: 1fr;
+}
+
+.browser-panel {
   grid-template-columns: 1fr;
 }
 
@@ -412,6 +417,74 @@ h2 {
   background: #f8fbfd;
 }
 
+.browser-controls {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 120px 120px auto;
+  gap: 14px;
+  align-items: end;
+  padding: 20px;
+  border: 1px solid #d6e0e7;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 18px 50px rgba(26, 42, 53, 0.08);
+}
+
+.browser-controls label {
+  display: grid;
+  gap: 8px;
+  color: #33424d;
+  font-weight: 700;
+}
+
+.browser-controls input,
+.browser-controls select {
+  width: 100%;
+  border: 1px solid #b9c7d2;
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.browser-controls button {
+  border: 1px solid #19384c;
+  border-radius: 6px;
+  padding: 11px 16px;
+  color: #ffffff;
+  background: #19384c;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.browser-endpoints {
+  display: grid;
+  gap: 8px;
+}
+
+.browser-results {
+  overflow: auto;
+  border: 1px solid #d6e0e7;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.browser-results table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.browser-results th,
+.browser-results td {
+  padding: 12px;
+  border-bottom: 1px solid #d6e0e7;
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.browser-results pre {
+  margin: 0;
+  padding: 16px;
+}
+
 @media (max-width: 720px) {
   .auth-page,
   .dashboard {
@@ -424,6 +497,7 @@ h2 {
   .data-model-layout,
   .form-grid,
   .attribute-row,
+  .browser-controls,
   .table-header,
   .transaction-row > button {
     grid-template-columns: 1fr;

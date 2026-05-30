@@ -67,6 +67,12 @@ function App() {
   const [dataModels, setDataModels] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [expandedTransactionId, setExpandedTransactionId] = useState(null);
+  const [browserModels, setBrowserModels] = useState([]);
+  const [selectedBrowserModel, setSelectedBrowserModel] = useState("");
+  const [browserRecords, setBrowserRecords] = useState([]);
+  const [browserLimit, setBrowserLimit] = useState(100);
+  const [browserOffset, setBrowserOffset] = useState(0);
+  const [browserMessage, setBrowserMessage] = useState("");
   const [form, setForm] = useState(emptyDataModel);
   const [editingId, setEditingId] = useState(null);
   const [modelMessage, setModelMessage] = useState("");
@@ -138,6 +144,9 @@ function App() {
     if (token && page === "transactions") {
       loadTransactions();
     }
+    if (token && page === "data-browser") {
+      loadBrowserModels();
+    }
   }, [page, token]);
 
   async function handleLogin(event) {
@@ -199,6 +208,48 @@ function App() {
       setTransactions(await response.json());
     } catch (err) {
       setModelMessage(err instanceof Error ? err.message : "Unable to load transactions");
+    }
+  }
+
+  async function loadBrowserModels() {
+    try {
+      const response = await fetch(`${API_BASE_URL}/data-models?status=active&type=A`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        throw new Error("Unable to load Type A data models");
+      }
+      const models = await response.json();
+      setBrowserModels(models);
+      if (!selectedBrowserModel && models.length > 0) {
+        setSelectedBrowserModel(models[0].name);
+      }
+    } catch (err) {
+      setBrowserMessage(err instanceof Error ? err.message : "Unable to load models");
+    }
+  }
+
+  async function loadBrowserRecords(event) {
+    event?.preventDefault();
+    if (!selectedBrowserModel) {
+      setBrowserMessage("Select a data model first.");
+      return;
+    }
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/outbound/${selectedBrowserModel}?limit=${browserLimit}&offset=${browserOffset}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!response.ok) {
+        const detail = await response.json().catch(() => null);
+        throw new Error(detail?.detail || "Unable to load records");
+      }
+      const data = await response.json();
+      setBrowserRecords(data.data);
+      setBrowserMessage(`${data.count} records loaded.`);
+    } catch (err) {
+      setBrowserRecords([]);
+      setBrowserMessage(err instanceof Error ? err.message : "Unable to load records");
     }
   }
 
@@ -337,7 +388,9 @@ function App() {
               ? "Operations Dashboard"
               : page === "data-models"
                 ? "Data Models"
-                : "Transactions"}
+                : page === "data-browser"
+                  ? "Data Browser"
+                  : "Transactions"}
           </h1>
           <p className="summary">
             Authenticated workspace for configurable manufacturing data services.
@@ -349,6 +402,9 @@ function App() {
           </button>
           <button type="button" onClick={() => setPage("data-models")}>
             Data Models
+          </button>
+          <button type="button" onClick={() => setPage("data-browser")}>
+            Data Browser
           </button>
           <button type="button" onClick={() => setPage("transactions")}>
             Transactions
@@ -375,6 +431,19 @@ function App() {
           updateAttribute={updateAttribute}
           addAttribute={addAttribute}
           removeAttribute={removeAttribute}
+        />
+      ) : page === "data-browser" ? (
+        <DataBrowserPage
+          models={browserModels}
+          selectedModel={selectedBrowserModel}
+          setSelectedModel={setSelectedBrowserModel}
+          limit={browserLimit}
+          setLimit={setBrowserLimit}
+          offset={browserOffset}
+          setOffset={setBrowserOffset}
+          records={browserRecords}
+          message={browserMessage}
+          loadRecords={loadBrowserRecords}
         />
       ) : (
         <TransactionsPage
@@ -686,6 +755,98 @@ function TransactionsPage({
           )}
         </article>
       ))}
+    </section>
+  );
+}
+
+function DataBrowserPage({
+  models,
+  selectedModel,
+  setSelectedModel,
+  limit,
+  setLimit,
+  offset,
+  setOffset,
+  records,
+  message,
+  loadRecords,
+}) {
+  const selected = models.find((model) => model.name === selectedModel);
+  const fields = records.length > 0 ? Object.keys(records[0]) : [];
+
+  return (
+    <section className="browser-panel">
+      <form className="browser-controls" onSubmit={loadRecords}>
+        <label>
+          Data Model
+          <select
+            value={selectedModel}
+            onChange={(event) => setSelectedModel(event.target.value)}
+          >
+            {models.map((model) => (
+              <option key={model.id} value={model.name}>
+                {model.display_name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Limit
+          <input
+            type="number"
+            min="1"
+            max="500"
+            value={limit}
+            onChange={(event) => setLimit(Number(event.target.value))}
+          />
+        </label>
+        <label>
+          Offset
+          <input
+            type="number"
+            min="0"
+            value={offset}
+            onChange={(event) => setOffset(Number(event.target.value))}
+          />
+        </label>
+        <button type="submit">Load Records</button>
+      </form>
+
+      {selected && (
+        <div className="browser-endpoints">
+          <p className="table-name">GET /outbound/{selected.name}</p>
+          <p className="table-name">
+            GET /outbound/{selected.name}/{selected.primary_key || "primary_key_value"}
+          </p>
+        </div>
+      )}
+
+      {message && <p className="form-message">{message}</p>}
+
+      <div className="browser-results">
+        {records.length > 0 ? (
+          <table>
+            <thead>
+              <tr>
+                {fields.map((field) => (
+                  <th key={field}>{field}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {records.map((record, index) => (
+                <tr key={index}>
+                  {fields.map((field) => (
+                    <td key={field}>{JSON.stringify(record[field])}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <pre>[]</pre>
+        )}
+      </div>
     </section>
   );
 }

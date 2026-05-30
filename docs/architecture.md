@@ -18,6 +18,8 @@ Data model management stores business object metadata in the `data_models` table
 
 Dynamic inbound REST APIs accept authenticated flat JSON payloads for active Type A models and write transaction logs for both successful and failed processing.
 
+Dynamic outbound REST APIs expose integrated Type A data through model-based endpoints without exposing raw tables or accepting user SQL.
+
 ### Database
 
 PostgreSQL 16 is the primary application database. It uses the default MVP database settings:
@@ -49,6 +51,7 @@ Implemented:
 - Data model metadata CRUD APIs
 - Type A generated PostgreSQL table creation
 - Dynamic inbound REST API for Type A models
+- Dynamic outbound REST API for Type A models
 - Transaction logging and transaction read APIs
 - SQLAlchemy database connection setup
 - Alembic migration setup

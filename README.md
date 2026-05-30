@@ -205,7 +205,77 @@ Current limitations:
 - JWT is required for inbound APIs. API keys for external systems will be added later.
 - Insert only; no upsert behavior yet.
 - Type B inbound is not supported.
-- Outbound APIs, MQTT, and schema evolution are not implemented yet.
+- MQTT and schema evolution are not implemented yet.
+
+## Dynamic Outbound API
+
+Type A models can be queried through authenticated outbound APIs:
+
+```text
+GET /outbound/{model_name}
+GET /outbound/{model_name}/{key}
+```
+
+Examples:
+
+```bash
+curl http://localhost:8000/outbound/quality_result \
+  -H "Authorization: Bearer <token>"
+
+curl http://localhost:8000/outbound/quality_result/QR-001 \
+  -H "Authorization: Bearer <token>"
+```
+
+List response shape:
+
+```json
+{
+  "status": "success",
+  "model": "quality_result",
+  "count": 2,
+  "limit": 100,
+  "offset": 0,
+  "data": [
+    {
+      "result_no": "QR-001",
+      "item_code": "ITEM-1001",
+      "batch_no": "BATCH-2026-001",
+      "inspection_date": "2026-05-30",
+      "result_value": 98.5,
+      "passed": true
+    }
+  ]
+}
+```
+
+By-key response shape:
+
+```json
+{
+  "status": "success",
+  "model": "quality_result",
+  "key": "QR-001",
+  "data": {
+    "result_no": "QR-001",
+    "item_code": "ITEM-1001"
+  }
+}
+```
+
+Options:
+
+- `limit`: default `100`, max `500`
+- `offset`: default `0`
+- `include_meta=true`: include `id`, `created_at`, `updated_at`
+- `include_raw=true`: include `raw_payload`
+- Equality filters on model attributes, such as `?item_code=ITEM-1001&passed=true`
+
+Current limitations:
+
+- Type A only. Type B outbound mapping will be added later.
+- JWT is required. API key access for external systems will be added later.
+- Equality filters only.
+- No AI semantic query layer yet.
 
 ## Testing Auth In Swagger UI
 

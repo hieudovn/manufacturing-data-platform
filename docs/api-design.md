@@ -116,7 +116,78 @@ Current limitations:
 
 - Insert only; no upsert yet.
 - JWT is required. API key access for external systems will be added later.
-- Type B inbound, outbound APIs, MQTT, and schema evolution are not implemented yet.
+- Type B inbound, MQTT, and schema evolution are not implemented yet.
+
+## Dynamic Outbound
+
+`GET /outbound/{model_name}`
+
+Requires a valid JWT for an active user.
+
+Behavior:
+
+- Finds the active data model by `model_name`.
+- Accepts Type A models only.
+- Selects only data model attribute columns by default.
+- Supports `limit`, `offset`, `include_meta`, and `include_raw`.
+- Supports simple equality filters on defined data model attributes.
+- Writes an outbound transaction log.
+
+List response:
+
+```json
+{
+  "status": "success",
+  "model": "quality_result",
+  "count": 2,
+  "limit": 100,
+  "offset": 0,
+  "data": [
+    {
+      "result_no": "QR-001",
+      "item_code": "ITEM-1001",
+      "batch_no": "BATCH-2026-001",
+      "inspection_date": "2026-05-30",
+      "result_value": 98.5,
+      "passed": true
+    }
+  ]
+}
+```
+
+`GET /outbound/{model_name}/{key}`
+
+Uses the data model `primary_key` attribute as the lookup column.
+
+By-key response:
+
+```json
+{
+  "status": "success",
+  "model": "quality_result",
+  "key": "QR-001",
+  "data": {
+    "result_no": "QR-001",
+    "item_code": "ITEM-1001"
+  }
+}
+```
+
+Security rules:
+
+- JWT is required.
+- Users cannot submit SQL.
+- Users cannot choose table names directly.
+- Table names are derived only from active data model metadata.
+- Filter fields must be defined model attributes.
+- All filter values are bound SQL parameters.
+
+Current limitations:
+
+- Type A only. Type B outbound query mapping will be added later.
+- API key access for external systems will be added later.
+- Equality filters only.
+- AI semantic query layer is not implemented yet.
 
 ## Transactions
 
