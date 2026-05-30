@@ -79,6 +79,18 @@ npm install
 npm run build
 ```
 
+## Production Deployment Preparation
+
+Production deployment assets are included for a cloud server Docker Compose deployment:
+
+- `.env.production.example`: production environment template with required secrets.
+- `docker-compose.prod.yml`: production stack using Caddy as the only public entry point.
+- `deploy/Caddyfile`: reverse proxy configuration for frontend, `/api`, `/docs`, and `/openapi.json`.
+- `scripts/backup_postgres.sh`: timestamped PostgreSQL backup script.
+- `scripts/restore_postgres.sh`: PostgreSQL restore script.
+
+Production startup requires `APP_ENV=production` and rejects default or weak secrets. See [docs/deployment.md](docs/deployment.md) before deploying.
+
 ## URLs
 
 - Frontend: http://localhost:3000

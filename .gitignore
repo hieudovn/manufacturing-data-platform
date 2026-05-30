@@ -15,9 +15,13 @@ npm-debug.log*
 # Environment
 .env
 .env.local
+.env.production
 
 # Docker and local data
 *.log
+backups/*.dump
+backups/*.sql
+backups/*.gz
 
 # IDE
 .idea/
@@ -26,4 +30,3 @@ npm-debug.log*
 # OS
 .DS_Store
 Thumbs.db
-

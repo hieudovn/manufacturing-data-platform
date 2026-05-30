@@ -21,12 +21,14 @@ services:
       context: ./backend
     container_name: mdp-backend
     environment:
+      APP_ENV: ${APP_ENV:-local}
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://mdp_user:mdp_password@postgres:5432/mdp}
       CORS_ORIGINS: ${CORS_ORIGINS:-["http://localhost:3000","http://127.0.0.1:3000"]}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change_me}
       JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-1440}
       CONNECTION_SECRET_KEY: ${CONNECTION_SECRET_KEY:-change_me_connection_secret_key}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mdp_password}
     ports:
       - "8000:8000"
     depends_on:
