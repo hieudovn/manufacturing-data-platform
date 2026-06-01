@@ -4,7 +4,9 @@ from pydantic import ValidationError
 from app.core.config import Settings
 
 
-def test_local_environment_allows_demo_defaults() -> None:
+def test_local_environment_allows_demo_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("JWT_SECRET_KEY", raising=False)
+
     settings = Settings(app_env="local")
 
     assert settings.app_env == "local"
