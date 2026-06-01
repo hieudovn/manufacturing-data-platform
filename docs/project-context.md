@@ -82,6 +82,7 @@ This creates a controlled data service layer between source systems and consumin
 - External ora2pg migration tracking
 - Migration run history
 - PostgreSQL target staging validation
+- Migration scope, row-limit, time-window, and watermark metadata foundation
 - Data Browser
 - Transaction Monitor
 - Admin UI consolidation
@@ -185,6 +186,8 @@ The MVP includes mock procurement staging data that simulates migrated Oracle JD
 - MDP does not run 30M+ row migrations inside FastAPI request handlers.
 - MDP tracks external migration jobs/runs and validates `mdp_staging` targets.
 - After validation, Type B models expose migrated staging data through governed outbound APIs.
+- Migration jobs store the last successful watermark to support future incremental updates.
+- Data integrity validation starts with target-side checks and can be expanded to source-target reconciliation later.
 - Use PostgreSQL views for multi-table curated objects such as `purchase_order_summary`.
 - Do not implement a multi-table Type B join engine in the MVP.
 - Keep IIoT and time-series storage out of this Manufacturing Data Platform MVP.

@@ -433,6 +433,11 @@ export const MIGRATION_TOOLS = ["ora2pg", "manual", "external_tool", "native_sma
 export const MIGRATION_SOURCE_TYPES = ["oracle", "postgresql", "sqlserver", "external"] as const;
 export const MIGRATION_LOAD_MODES = ["full_load", "incremental", "external_bulk", "validation_only"] as const;
 export const MIGRATION_RUN_STATUSES = ["pending", "running", "success", "failed", "cancelled"] as const;
+export const MIGRATION_INITIAL_LOAD_STRATEGIES = ["full_table", "row_limited", "time_window", "external_defined"] as const;
+export const MIGRATION_INCREMENTAL_STRATEGIES = ["none", "greater_than_last_watermark", "greater_equal_last_watermark_with_overlap", "external_defined"] as const;
+export const MIGRATION_WATERMARK_TYPES = ["date", "datetime", "number", "jde_julian_date", "text", "unknown"] as const;
+export const MIGRATION_VALIDATION_LEVELS = ["none", "basic", "key_integrity", "source_target_count", "checksum_sample", "full_reconciliation"] as const;
+export const MIGRATION_RUN_VALIDATION_STATUSES = ["not_validated", "pass", "warning", "fail"] as const;
 export type MigrationJob = {
   id: string;
   name: string;
@@ -449,6 +454,21 @@ export type MigrationJob = {
   estimated_size_gb: number | null;
   primary_key_columns: string[] | null;
   load_mode: string;
+  initial_load_strategy: string | null;
+  max_rows_per_run: number | null;
+  time_window_column: string | null;
+  time_window_column_type: string | null;
+  time_window_start: string | null;
+  time_window_end: string | null;
+  incremental_strategy: string | null;
+  watermark_column: string | null;
+  watermark_column_type: string | null;
+  last_successful_watermark: string | null;
+  last_successful_run_at: string | null;
+  last_run_at: string | null;
+  lookback_window_days: number | null;
+  lookback_window_minutes: number | null;
+  validation_level: string | null;
   status: string;
   config: Record<string, unknown> | null;
   created_at: string;
@@ -468,6 +488,14 @@ export type MigrationRun = {
   target_row_count: number | null;
   rows_loaded: number | null;
   duration_seconds: number | null;
+  run_scope: string | null;
+  from_watermark: string | null;
+  to_watermark: string | null;
+  source_min_watermark: string | null;
+  source_max_watermark: string | null;
+  target_min_watermark: string | null;
+  target_max_watermark: string | null;
+  validation_status: string | null;
   log_text: string | null;
   error_message: string | null;
   created_at: string;

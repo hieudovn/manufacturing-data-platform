@@ -12,6 +12,11 @@ RunType = Literal["full_load", "incremental", "validation_only", "external_bulk"
 TriggerType = Literal["manual", "external", "scheduled"]
 RunStatus = Literal["pending", "running", "success", "failed", "cancelled"]
 ValidationStatus = Literal["pass", "warning", "fail"]
+InitialLoadStrategy = Literal["full_table", "row_limited", "time_window", "external_defined"]
+WatermarkColumnType = Literal["date", "datetime", "number", "jde_julian_date", "text", "unknown"]
+IncrementalStrategy = Literal["none", "greater_than_last_watermark", "greater_equal_last_watermark_with_overlap", "external_defined"]
+ValidationLevel = Literal["none", "basic", "key_integrity", "source_target_count", "checksum_sample", "full_reconciliation"]
+RunValidationStatus = Literal["not_validated", "pass", "warning", "fail"]
 
 
 class MigrationJobBase(BaseModel):
@@ -29,6 +34,21 @@ class MigrationJobBase(BaseModel):
     estimated_size_gb: float | None = Field(default=None, ge=0)
     primary_key_columns: list[str] | None = None
     load_mode: LoadMode
+    initial_load_strategy: InitialLoadStrategy | None = None
+    max_rows_per_run: int | None = Field(default=None, gt=0)
+    time_window_column: str | None = Field(default=None, max_length=150)
+    time_window_column_type: WatermarkColumnType | None = None
+    time_window_start: str | None = Field(default=None, max_length=150)
+    time_window_end: str | None = Field(default=None, max_length=150)
+    incremental_strategy: IncrementalStrategy | None = "none"
+    watermark_column: str | None = Field(default=None, max_length=150)
+    watermark_column_type: WatermarkColumnType | None = None
+    last_successful_watermark: str | None = Field(default=None, max_length=150)
+    last_successful_run_at: datetime | None = None
+    last_run_at: datetime | None = None
+    lookback_window_days: int | None = Field(default=None, ge=0)
+    lookback_window_minutes: int | None = Field(default=None, ge=0)
+    validation_level: ValidationLevel | None = "basic"
     status: str = Field(default="active", max_length=50)
     config: dict[str, Any] | None = None
 
@@ -60,6 +80,21 @@ class MigrationJobUpdate(BaseModel):
     estimated_size_gb: float | None = Field(default=None, ge=0)
     primary_key_columns: list[str] | None = None
     load_mode: LoadMode | None = None
+    initial_load_strategy: InitialLoadStrategy | None = None
+    max_rows_per_run: int | None = Field(default=None, gt=0)
+    time_window_column: str | None = Field(default=None, max_length=150)
+    time_window_column_type: WatermarkColumnType | None = None
+    time_window_start: str | None = Field(default=None, max_length=150)
+    time_window_end: str | None = Field(default=None, max_length=150)
+    incremental_strategy: IncrementalStrategy | None = None
+    watermark_column: str | None = Field(default=None, max_length=150)
+    watermark_column_type: WatermarkColumnType | None = None
+    last_successful_watermark: str | None = Field(default=None, max_length=150)
+    last_successful_run_at: datetime | None = None
+    last_run_at: datetime | None = None
+    lookback_window_days: int | None = Field(default=None, ge=0)
+    lookback_window_minutes: int | None = Field(default=None, ge=0)
+    validation_level: ValidationLevel | None = None
     status: str | None = Field(default=None, max_length=50)
     config: dict[str, Any] | None = None
 
@@ -74,6 +109,14 @@ class MigrationRunCreate(BaseModel):
     target_row_count: int | None = Field(default=None, ge=0)
     rows_loaded: int | None = Field(default=None, ge=0)
     duration_seconds: int | None = Field(default=None, ge=0)
+    run_scope: str | None = Field(default=None, max_length=255)
+    from_watermark: str | None = Field(default=None, max_length=150)
+    to_watermark: str | None = Field(default=None, max_length=150)
+    source_min_watermark: str | None = Field(default=None, max_length=150)
+    source_max_watermark: str | None = Field(default=None, max_length=150)
+    target_min_watermark: str | None = Field(default=None, max_length=150)
+    target_max_watermark: str | None = Field(default=None, max_length=150)
+    validation_status: RunValidationStatus | None = "not_validated"
     log_text: str | None = None
     error_message: str | None = None
 
@@ -88,6 +131,14 @@ class MigrationRunUpdate(BaseModel):
     target_row_count: int | None = Field(default=None, ge=0)
     rows_loaded: int | None = Field(default=None, ge=0)
     duration_seconds: int | None = Field(default=None, ge=0)
+    run_scope: str | None = Field(default=None, max_length=255)
+    from_watermark: str | None = Field(default=None, max_length=150)
+    to_watermark: str | None = Field(default=None, max_length=150)
+    source_min_watermark: str | None = Field(default=None, max_length=150)
+    source_max_watermark: str | None = Field(default=None, max_length=150)
+    target_min_watermark: str | None = Field(default=None, max_length=150)
+    target_max_watermark: str | None = Field(default=None, max_length=150)
+    validation_status: RunValidationStatus | None = None
     log_text: str | None = None
     error_message: str | None = None
 
@@ -117,6 +168,14 @@ class MigrationRunRead(BaseModel):
     target_row_count: int | None
     rows_loaded: int | None
     duration_seconds: int | None
+    run_scope: str | None
+    from_watermark: str | None
+    to_watermark: str | None
+    source_min_watermark: str | None
+    source_max_watermark: str | None
+    target_min_watermark: str | None
+    target_max_watermark: str | None
+    validation_status: str | None
     log_text: str | None
     error_message: str | None
     triggered_by: uuid.UUID | None

@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import func, select, text
@@ -117,10 +118,12 @@ def create_migration_run(
 ) -> MigrationRun:
     run = MigrationRun(
         migration_job_id=job.id,
+        job=job,
         triggered_by=triggered_by,
         **run_in.model_dump(),
     )
     db.add(run)
+    _apply_run_status_to_job(run)
     db.commit()
     db.refresh(run)
     return run
@@ -133,6 +136,7 @@ def update_migration_run(
 ) -> MigrationRun:
     for field, value in run_in.model_dump(exclude_unset=True).items():
         setattr(run, field, value)
+    _apply_run_status_to_job(run)
     db.add(run)
     db.commit()
     db.refresh(run)
@@ -195,6 +199,41 @@ def _count_duplicate_keys(
     return int(result)
 
 
+def _min_max_values(db: Session, schema_name: str, table_name: str, column_name: str) -> tuple[str | None, str | None]:
+    row = db.execute(
+        text(
+            f"SELECT MIN({quote_identifier(column_name)}) AS min_value, "
+            f"MAX({quote_identifier(column_name)}) AS max_value "
+            f"FROM {_qualified_table(db, schema_name, table_name)}"
+        )
+    ).one()
+    min_value = row[0]
+    max_value = row[1]
+    return (
+        None if min_value is None else str(min_value),
+        None if max_value is None else str(max_value),
+    )
+
+
+def _apply_run_status_to_job(run: MigrationRun) -> None:
+    if run.status not in {"success", "failed"}:
+        return
+    now = datetime.now(timezone.utc)
+    run.job.last_run_at = run.finished_at or now
+    if run.status == "success":
+        run.job.last_successful_run_at = run.finished_at or now
+        if run.to_watermark:
+            run.job.last_successful_watermark = run.to_watermark
+
+
+def _validation_status(validations: list[MigrationValidation]) -> str:
+    if not validations or any(validation.status == "fail" for validation in validations):
+        return "fail"
+    if any(validation.status == "warning" for validation in validations):
+        return "warning"
+    return "pass"
+
+
 def _validation(
     run_id: uuid.UUID,
     check_name: str,
@@ -219,16 +258,21 @@ def validate_target_table(db: Session, run: MigrationRun) -> dict[str, Any]:
     target_schema = job.target_schema
     target_table = job.target_table
     primary_key_columns = job.primary_key_columns or []
+    watermark_column = job.watermark_column
 
     validations: list[MigrationValidation] = []
     sample_rows: list[dict[str, Any]] = []
     target_row_count: int | None = None
+    target_min_watermark: str | None = None
+    target_max_watermark: str | None = None
 
     try:
         validate_identifier(target_schema, "target_schema")
         validate_identifier(target_table, "target_table")
         for column in primary_key_columns:
             validate_identifier(column, "primary_key_columns")
+        if watermark_column:
+            validate_identifier(watermark_column, "watermark_column")
     except DbBrowserValidationError as exc:
         validations.append(_validation(run.id, "identifier_validation", status="fail", message=str(exc)))
     else:
@@ -276,6 +320,49 @@ def validate_target_table(db: Session, run: MigrationRun) -> dict[str, Any]:
                         message=None if duplicate_count == 0 else "Duplicate primary key values found",
                     )
                 )
+            if watermark_column:
+                if watermark_column not in columns:
+                    validations.append(
+                        _validation(
+                            run.id,
+                            f"watermark_column:{watermark_column}",
+                            status="fail",
+                            message="Watermark column not found in target table",
+                        )
+                    )
+                else:
+                    validations.append(
+                        _validation(
+                            run.id,
+                            f"watermark_column:{watermark_column}",
+                            status="pass",
+                            target_value=watermark_column,
+                        )
+                    )
+                    target_min_watermark, target_max_watermark = _min_max_values(
+                        db,
+                        target_schema,
+                        target_table,
+                        watermark_column,
+                    )
+                    validations.append(
+                        _validation(
+                            run.id,
+                            "target_watermark_min",
+                            status="pass" if target_min_watermark is not None else "warning",
+                            target_value=target_min_watermark,
+                            message=None if target_min_watermark is not None else "Target watermark minimum is null",
+                        )
+                    )
+                    validations.append(
+                        _validation(
+                            run.id,
+                            "target_watermark_max",
+                            status="pass" if target_max_watermark is not None else "warning",
+                            target_value=target_max_watermark,
+                            message=None if target_max_watermark is not None else "Target watermark maximum is null",
+                        )
+                    )
             try:
                 sample_rows = preview_table(db, target_schema, target_table, limit=10)["rows"]
             except (DbBrowserValidationError, DbBrowserNotFoundError):
@@ -285,6 +372,9 @@ def validate_target_table(db: Session, run: MigrationRun) -> dict[str, Any]:
     for validation in validations:
         db.add(validation)
     run.target_row_count = target_row_count
+    run.target_min_watermark = target_min_watermark
+    run.target_max_watermark = target_max_watermark
+    run.validation_status = _validation_status(validations)
     db.add(run)
     db.commit()
     db.refresh(run)
@@ -295,7 +385,8 @@ def validate_target_table(db: Session, run: MigrationRun) -> dict[str, Any]:
             .order_by(MigrationValidation.created_at.asc(), MigrationValidation.check_name.asc())
         )
     )
-    status = "success" if saved_validations and all(v.status != "fail" for v in saved_validations) else "failed"
+    validation_status = _validation_status(saved_validations)
+    status = "success" if validation_status in {"pass", "warning"} else "failed"
     return {
         "status": status,
         "migration_run_id": run.id,

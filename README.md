@@ -591,7 +591,7 @@ Important rule:
 MDP does not replace ora2pg for 30M+ row initial loads.
 ```
 
-Use ora2pg or another external bulk loader for high-volume full loads. Avenue MDP stores the job metadata, records run results, validates target staging tables, and then exposes the migrated data through Type B Linked Data Models and governed outbound APIs. Detailed guidance is in [docs/migration-jobs.md](docs/migration-jobs.md).
+Use ora2pg or another external bulk loader for high-volume full loads. Avenue MDP stores the job metadata, records run results, validates target staging tables, tracks row-limit/time-window/watermark metadata for future incremental updates, and then exposes the migrated data through Type B Linked Data Models and governed outbound APIs. Detailed guidance is in [docs/migration-jobs.md](docs/migration-jobs.md).
 
 Authenticated APIs:
 

@@ -19,6 +19,12 @@ def migration_job_payload(name: str = "jde_supplier_ora2pg") -> dict:
         "estimated_size_gb": 30,
         "primary_key_columns": ["supplier_code"],
         "load_mode": "external_bulk",
+        "initial_load_strategy": "external_defined",
+        "incremental_strategy": "greater_than_last_watermark",
+        "watermark_column": "updated_at",
+        "watermark_column_type": "datetime",
+        "lookback_window_days": 1,
+        "validation_level": "basic",
         "config": {"ora2pg_project": "jde_supplier"},
     }
 
@@ -36,6 +42,8 @@ def test_create_migration_job(client: TestClient, auth_headers: dict[str, str]) 
     assert created["migration_tool"] == "ora2pg"
     assert created["load_mode"] == "external_bulk"
     assert created["target_schema"] == "mdp_staging"
+    assert created["incremental_strategy"] == "greater_than_last_watermark"
+    assert created["watermark_column"] == "updated_at"
 
 
 def test_create_and_update_migration_run(client: TestClient, auth_headers: dict[str, str]) -> None:
@@ -49,6 +57,8 @@ def test_create_and_update_migration_run(client: TestClient, auth_headers: dict[
             "trigger_type": "external",
             "status": "running",
             "source_row_count": 5,
+            "from_watermark": "2026-05-01",
+            "to_watermark": "2026-05-31",
             "log_text": "ora2pg started outside MDP",
         },
     )
@@ -63,6 +73,7 @@ def test_create_and_update_migration_run(client: TestClient, auth_headers: dict[
             "target_row_count": 5,
             "rows_loaded": 5,
             "duration_seconds": 10,
+            "to_watermark": "2026-05-31",
             "log_text": "ora2pg finished outside MDP",
         },
     )
@@ -70,6 +81,10 @@ def test_create_and_update_migration_run(client: TestClient, auth_headers: dict[
     assert update_response.status_code == 200, update_response.text
     assert update_response.json()["status"] == "success"
     assert update_response.json()["rows_loaded"] == 5
+    refreshed = client.get(f"/migration-jobs/{job['id']}", headers=auth_headers)
+    assert refreshed.status_code == 200
+    assert refreshed.json()["last_successful_watermark"] == "2026-05-31"
+    assert refreshed.json()["last_successful_run_at"] is not None
 
 
 def test_validate_target_table_counts_seeded_rows(
@@ -98,6 +113,12 @@ def test_validate_target_table_counts_seeded_rows(
     assert checks["target_table_exists"]["status"] == "pass"
     assert checks["primary_key_null_count:supplier_code"]["target_value"] == "0"
     assert checks["primary_key_duplicate_count"]["target_value"] == "0"
+    assert checks["watermark_column:updated_at"]["status"] == "pass"
+    assert checks["target_watermark_max"]["target_value"] is not None
+    run_detail = client.get(f"/migration-runs/{run['id']}", headers=auth_headers)
+    assert run_detail.status_code == 200
+    assert run_detail.json()["validation_status"] == "pass"
+    assert run_detail.json()["target_max_watermark"] is not None
 
 
 def test_validate_target_table_missing_table_fails(
@@ -122,6 +143,42 @@ def test_validate_target_table_missing_table_fails(
     data = response.json()
     assert data["status"] == "failed"
     assert any(v["check_name"] == "target_table_exists" and v["status"] == "fail" for v in data["validations"])
+    run_detail = client.get(f"/migration-runs/{run['id']}", headers=auth_headers)
+    assert run_detail.json()["validation_status"] == "fail"
+
+
+def test_failed_run_does_not_update_last_successful_watermark(
+    client: TestClient,
+    auth_headers: dict[str, str],
+) -> None:
+    job = create_job(client, auth_headers, "jde_supplier_failed_watermark")
+    success_response = client.post(
+        f"/migration-jobs/{job['id']}/runs",
+        headers=auth_headers,
+        json={"run_type": "external_bulk", "trigger_type": "external", "status": "success", "to_watermark": "2026-05-31"},
+    )
+    assert success_response.status_code == 201
+
+    failed_response = client.post(
+        f"/migration-jobs/{job['id']}/runs",
+        headers=auth_headers,
+        json={"run_type": "external_bulk", "trigger_type": "external", "status": "failed", "to_watermark": "2026-06-30"},
+    )
+    assert failed_response.status_code == 201
+
+    refreshed = client.get(f"/migration-jobs/{job['id']}", headers=auth_headers)
+    assert refreshed.status_code == 200
+    assert refreshed.json()["last_successful_watermark"] == "2026-05-31"
+    assert refreshed.json()["last_run_at"] is not None
+
+
+def test_max_rows_per_run_must_be_positive(client: TestClient, auth_headers: dict[str, str]) -> None:
+    payload = migration_job_payload("invalid_max_rows")
+    payload["max_rows_per_run"] = 0
+
+    response = client.post("/migration-jobs", headers=auth_headers, json=payload)
+
+    assert response.status_code == 422
 
 
 def test_list_migration_runs(client: TestClient, auth_headers: dict[str, str]) -> None:

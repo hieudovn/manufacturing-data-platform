@@ -29,10 +29,15 @@ import {
   getMigrationRun,
   listMigrationJobs,
   listMigrationRuns,
+  MIGRATION_INCREMENTAL_STRATEGIES,
+  MIGRATION_INITIAL_LOAD_STRATEGIES,
   MIGRATION_LOAD_MODES,
   MIGRATION_RUN_STATUSES,
+  MIGRATION_RUN_VALIDATION_STATUSES,
   MIGRATION_SOURCE_TYPES,
   MIGRATION_TOOLS,
+  MIGRATION_VALIDATION_LEVELS,
+  MIGRATION_WATERMARK_TYPES,
   updateMigrationJob,
   updateMigrationRun,
   validateMigrationTarget,
@@ -64,6 +69,18 @@ type JobForm = {
   estimated_size_gb: string;
   primary_key_columns: string;
   load_mode: string;
+  initial_load_strategy: string;
+  max_rows_per_run: string;
+  time_window_column: string;
+  time_window_column_type: string;
+  time_window_start: string;
+  time_window_end: string;
+  incremental_strategy: string;
+  watermark_column: string;
+  watermark_column_type: string;
+  lookback_window_days: string;
+  lookback_window_minutes: string;
+  validation_level: string;
   status: string;
   config_json: string;
 };
@@ -78,6 +95,14 @@ type RunForm = {
   target_row_count: string;
   rows_loaded: string;
   duration_seconds: string;
+  run_scope: string;
+  from_watermark: string;
+  to_watermark: string;
+  source_min_watermark: string;
+  source_max_watermark: string;
+  target_min_watermark: string;
+  target_max_watermark: string;
+  validation_status: string;
   log_text: string;
   error_message: string;
 };
@@ -164,6 +189,18 @@ function emptyJobForm(): JobForm {
     estimated_size_gb: "",
     primary_key_columns: "",
     load_mode: "external_bulk",
+    initial_load_strategy: "external_defined",
+    max_rows_per_run: "",
+    time_window_column: "",
+    time_window_column_type: "unknown",
+    time_window_start: "",
+    time_window_end: "",
+    incremental_strategy: "none",
+    watermark_column: "",
+    watermark_column_type: "unknown",
+    lookback_window_days: "",
+    lookback_window_minutes: "",
+    validation_level: "basic",
     status: "active",
     config_json: '{\n  "ora2pg_project": ""\n}',
   };
@@ -185,6 +222,18 @@ function jobFormFromJob(job: MigrationJob): JobForm {
     estimated_size_gb: job.estimated_size_gb == null ? "" : String(job.estimated_size_gb),
     primary_key_columns: job.primary_key_columns?.join(", ") || "",
     load_mode: job.load_mode,
+    initial_load_strategy: job.initial_load_strategy || "external_defined",
+    max_rows_per_run: job.max_rows_per_run == null ? "" : String(job.max_rows_per_run),
+    time_window_column: job.time_window_column || "",
+    time_window_column_type: job.time_window_column_type || "unknown",
+    time_window_start: job.time_window_start || "",
+    time_window_end: job.time_window_end || "",
+    incremental_strategy: job.incremental_strategy || "none",
+    watermark_column: job.watermark_column || "",
+    watermark_column_type: job.watermark_column_type || "unknown",
+    lookback_window_days: job.lookback_window_days == null ? "" : String(job.lookback_window_days),
+    lookback_window_minutes: job.lookback_window_minutes == null ? "" : String(job.lookback_window_minutes),
+    validation_level: job.validation_level || "basic",
     status: job.status,
     config_json: prettyJson(job.config),
   };
@@ -201,6 +250,14 @@ function emptyRunForm(): RunForm {
     target_row_count: "",
     rows_loaded: "",
     duration_seconds: "",
+    run_scope: "",
+    from_watermark: "",
+    to_watermark: "",
+    source_min_watermark: "",
+    source_max_watermark: "",
+    target_min_watermark: "",
+    target_max_watermark: "",
+    validation_status: "not_validated",
     log_text: "",
     error_message: "",
   };
@@ -217,6 +274,14 @@ function runFormFromRun(run: MigrationRun): RunForm {
     target_row_count: run.target_row_count == null ? "" : String(run.target_row_count),
     rows_loaded: run.rows_loaded == null ? "" : String(run.rows_loaded),
     duration_seconds: run.duration_seconds == null ? "" : String(run.duration_seconds),
+    run_scope: run.run_scope || "",
+    from_watermark: run.from_watermark || "",
+    to_watermark: run.to_watermark || "",
+    source_min_watermark: run.source_min_watermark || "",
+    source_max_watermark: run.source_max_watermark || "",
+    target_min_watermark: run.target_min_watermark || "",
+    target_max_watermark: run.target_max_watermark || "",
+    validation_status: run.validation_status || "not_validated",
     log_text: run.log_text || "",
     error_message: run.error_message || "",
   };
@@ -435,6 +500,18 @@ export default function MigrationJobsPage() {
       estimated_size_gb: parseNullableNumber(jobForm.estimated_size_gb),
       primary_key_columns: parseStringList(jobForm.primary_key_columns),
       load_mode: jobForm.load_mode,
+      initial_load_strategy: jobForm.initial_load_strategy || null,
+      max_rows_per_run: parseNullableNumber(jobForm.max_rows_per_run),
+      time_window_column: jobForm.time_window_column.trim() || null,
+      time_window_column_type: jobForm.time_window_column_type || null,
+      time_window_start: jobForm.time_window_start.trim() || null,
+      time_window_end: jobForm.time_window_end.trim() || null,
+      incremental_strategy: jobForm.incremental_strategy || "none",
+      watermark_column: jobForm.watermark_column.trim() || null,
+      watermark_column_type: jobForm.watermark_column_type || null,
+      lookback_window_days: parseNullableNumber(jobForm.lookback_window_days),
+      lookback_window_minutes: parseNullableNumber(jobForm.lookback_window_minutes),
+      validation_level: jobForm.validation_level || "basic",
       status: jobForm.status,
       config,
     };
@@ -563,6 +640,14 @@ export default function MigrationJobsPage() {
       target_row_count: parseNullableNumber(runForm.target_row_count),
       rows_loaded: parseNullableNumber(runForm.rows_loaded),
       duration_seconds: parseNullableNumber(runForm.duration_seconds),
+      run_scope: runForm.run_scope.trim() || null,
+      from_watermark: runForm.from_watermark.trim() || null,
+      to_watermark: runForm.to_watermark.trim() || null,
+      source_min_watermark: runForm.source_min_watermark.trim() || null,
+      source_max_watermark: runForm.source_max_watermark.trim() || null,
+      target_min_watermark: runForm.target_min_watermark.trim() || null,
+      target_max_watermark: runForm.target_max_watermark.trim() || null,
+      validation_status: runForm.validation_status || "not_validated",
       log_text: runForm.log_text.trim() || null,
       error_message: runForm.error_message.trim() || null,
     };
@@ -647,6 +732,9 @@ export default function MigrationJobsPage() {
         <p className="rounded-md bg-warning/10 px-3 py-2 text-sm text-warning">
           MDP does not run large JDE full loads inside FastAPI. Use ora2pg or another external bulk loader, then record and validate the result here.
         </p>
+        <p className="rounded-md bg-info/10 px-3 py-2 text-sm text-info">
+          Initial full-load for large JDE tables should be performed by ora2pg or an external bulk loader. MDP records the run, validates the target staging table, and stores watermark metadata for future incremental updates.
+        </p>
         <Section title="Overview">
           <div className="grid gap-3 md:grid-cols-2">
             <Input label="Name" value={jobForm.name} onChange={(e) => setFormValue("name", e.target.value)} disabled={readOnly} />
@@ -680,6 +768,35 @@ export default function MigrationJobsPage() {
             <Input label="Estimated Size GB" value={jobForm.estimated_size_gb} onChange={(e) => setFormValue("estimated_size_gb", e.target.value)} disabled={readOnly} />
           </div>
         </Section>
+        <Section
+          title="Migration Scope & Incremental Control"
+          subtitle="Watermark is the latest successfully migrated position. Future incremental jobs can use it to migrate only new or changed records."
+        >
+          <div className="grid gap-3 md:grid-cols-2">
+            <Select label="Initial Load Strategy" value={jobForm.initial_load_strategy} onChange={(e) => setFormValue("initial_load_strategy", e.target.value)} disabled={readOnly}>
+              {MIGRATION_INITIAL_LOAD_STRATEGIES.map((item) => <option key={item} value={item}>{titleize(item)}</option>)}
+            </Select>
+            <Input label="Max Rows Per Run" value={jobForm.max_rows_per_run} onChange={(e) => setFormValue("max_rows_per_run", e.target.value)} disabled={readOnly} />
+            <Input label="Time Window Column" value={jobForm.time_window_column} onChange={(e) => setFormValue("time_window_column", e.target.value)} placeholder="updated_at or upmj" disabled={readOnly} />
+            <Select label="Time Window Column Type" value={jobForm.time_window_column_type} onChange={(e) => setFormValue("time_window_column_type", e.target.value)} disabled={readOnly}>
+              {MIGRATION_WATERMARK_TYPES.map((item) => <option key={item} value={item}>{titleize(item)}</option>)}
+            </Select>
+            <Input label="Time Window Start" value={jobForm.time_window_start} onChange={(e) => setFormValue("time_window_start", e.target.value)} disabled={readOnly} />
+            <Input label="Time Window End" value={jobForm.time_window_end} onChange={(e) => setFormValue("time_window_end", e.target.value)} disabled={readOnly} />
+            <Select label="Incremental Strategy" value={jobForm.incremental_strategy} onChange={(e) => setFormValue("incremental_strategy", e.target.value)} disabled={readOnly}>
+              {MIGRATION_INCREMENTAL_STRATEGIES.map((item) => <option key={item} value={item}>{titleize(item)}</option>)}
+            </Select>
+            <Input label="Watermark Column" value={jobForm.watermark_column} onChange={(e) => setFormValue("watermark_column", e.target.value)} placeholder="updated_at" disabled={readOnly} />
+            <Select label="Watermark Column Type" value={jobForm.watermark_column_type} onChange={(e) => setFormValue("watermark_column_type", e.target.value)} disabled={readOnly}>
+              {MIGRATION_WATERMARK_TYPES.map((item) => <option key={item} value={item}>{titleize(item)}</option>)}
+            </Select>
+            <Input label="Lookback Window Days" value={jobForm.lookback_window_days} onChange={(e) => setFormValue("lookback_window_days", e.target.value)} disabled={readOnly} />
+            <Input label="Lookback Window Minutes" value={jobForm.lookback_window_minutes} onChange={(e) => setFormValue("lookback_window_minutes", e.target.value)} disabled={readOnly} />
+            <Select label="Validation Level" value={jobForm.validation_level} onChange={(e) => setFormValue("validation_level", e.target.value)} disabled={readOnly}>
+              {MIGRATION_VALIDATION_LEVELS.map((item) => <option key={item} value={item}>{titleize(item)}</option>)}
+            </Select>
+          </div>
+        </Section>
         <Section title="Config" subtitle="Optional JSON object for external tool metadata, ora2pg project names, or command notes.">
           <TextArea label="Config JSON" value={jobForm.config_json} onChange={(value) => setFormValue("config_json", value)} rows={8} disabled={readOnly} />
         </Section>
@@ -707,6 +824,20 @@ export default function MigrationJobsPage() {
             <Input label="Source Row Count" value={runForm.source_row_count} onChange={(e) => setRunValue("source_row_count", e.target.value)} disabled={readOnly} />
             <Input label="Target Row Count" value={runForm.target_row_count} onChange={(e) => setRunValue("target_row_count", e.target.value)} disabled={readOnly} />
             <Input label="Rows Loaded" value={runForm.rows_loaded} onChange={(e) => setRunValue("rows_loaded", e.target.value)} disabled={readOnly} />
+          </div>
+        </Section>
+        <Section title="Scope & Watermark">
+          <div className="grid gap-3 md:grid-cols-2">
+            <Input label="Run Scope" value={runForm.run_scope} onChange={(e) => setRunValue("run_scope", e.target.value)} placeholder="watermark > 2026-05-31" disabled={readOnly} />
+            <Select label="Validation Status" value={runForm.validation_status} onChange={(e) => setRunValue("validation_status", e.target.value)} disabled={readOnly}>
+              {MIGRATION_RUN_VALIDATION_STATUSES.map((item) => <option key={item} value={item}>{titleize(item)}</option>)}
+            </Select>
+            <Input label="From Watermark" value={runForm.from_watermark} onChange={(e) => setRunValue("from_watermark", e.target.value)} disabled={readOnly} />
+            <Input label="To Watermark" value={runForm.to_watermark} onChange={(e) => setRunValue("to_watermark", e.target.value)} disabled={readOnly} />
+            <Input label="Source Min Watermark" value={runForm.source_min_watermark} onChange={(e) => setRunValue("source_min_watermark", e.target.value)} disabled={readOnly} />
+            <Input label="Source Max Watermark" value={runForm.source_max_watermark} onChange={(e) => setRunValue("source_max_watermark", e.target.value)} disabled={readOnly} />
+            <Input label="Target Min Watermark" value={runForm.target_min_watermark} onChange={(e) => setRunValue("target_min_watermark", e.target.value)} disabled={readOnly} />
+            <Input label="Target Max Watermark" value={runForm.target_max_watermark} onChange={(e) => setRunValue("target_max_watermark", e.target.value)} disabled={readOnly} />
           </div>
         </Section>
         <Section title="Logs">
@@ -870,6 +1001,30 @@ export default function MigrationJobsPage() {
                 ["Estimated Size GB", viewJob.estimated_size_gb],
               ]} />
             </Section>
+            <Section title="Migration Scope & Incremental Control">
+              <DetailGrid items={[
+                ["Initial Load Strategy", titleize(viewJob.initial_load_strategy)],
+                ["Max Rows Per Run", viewJob.max_rows_per_run],
+                ["Time Window Column", viewJob.time_window_column],
+                ["Time Window Type", titleize(viewJob.time_window_column_type)],
+                ["Time Window Start", viewJob.time_window_start],
+                ["Time Window End", viewJob.time_window_end],
+                ["Incremental Strategy", titleize(viewJob.incremental_strategy)],
+                ["Watermark Column", viewJob.watermark_column],
+                ["Watermark Type", titleize(viewJob.watermark_column_type)],
+                ["Lookback Days", viewJob.lookback_window_days],
+                ["Lookback Minutes", viewJob.lookback_window_minutes],
+              ]} />
+            </Section>
+            <Section title="Watermark & Latest Run">
+              <DetailGrid items={[
+                ["Last Run At", formatDate(viewJob.last_run_at)],
+                ["Last Successful Run At", formatDate(viewJob.last_successful_run_at)],
+                ["Last Successful Watermark", viewJob.last_successful_watermark],
+                ["Validation Level", titleize(viewJob.validation_level)],
+                ["Incremental Strategy", titleize(viewJob.incremental_strategy)],
+              ]} />
+            </Section>
             <Section title="Config">
               <pre className="max-h-72 overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-50">
                 {prettyJson(viewJob.config) || "-"}
@@ -958,10 +1113,13 @@ function RunTable({
       <colgroup>
         <col className="w-[120px]" />
         <col className="w-[100px]" />
+        <col className="w-[110px]" />
         <col className="w-[120px]" />
         <col className="w-[120px]" />
         <col className="w-[145px]" />
         <col className="w-[145px]" />
+        <col className="w-[180px]" />
+        <col className="w-[140px]" />
         <col className="w-[120px]" />
         <col className="w-[120px]" />
         <col className="w-[115px]" />
@@ -971,10 +1129,13 @@ function RunTable({
         <TR>
           <TH className="text-center">Actions</TH>
           <TH>Status</TH>
+          <TH>Validation</TH>
           <TH>Run Type</TH>
           <TH>Trigger</TH>
           <TH>Started At</TH>
           <TH>Finished At</TH>
+          <TH>Run Scope</TH>
+          <TH>To Watermark</TH>
           <TH>Source Rows</TH>
           <TH>Target Rows</TH>
           <TH>Rows Loaded</TH>
@@ -998,10 +1159,13 @@ function RunTable({
               </div>
             </TD>
             <TD><Badge tone={badgeTone(run.status)}>{run.status}</Badge></TD>
+            <TD><Badge tone={badgeTone(run.validation_status)}>{run.validation_status || "not_validated"}</Badge></TD>
             <TD>{titleize(run.run_type)}</TD>
             <TD>{titleize(run.trigger_type)}</TD>
             <TD className="truncate" title={formatDate(run.started_at)}>{formatDate(run.started_at)}</TD>
             <TD className="truncate" title={formatDate(run.finished_at)}>{formatDate(run.finished_at)}</TD>
+            <TD className="truncate" title={run.run_scope || "-"}>{run.run_scope || "-"}</TD>
+            <TD className="truncate" title={run.to_watermark || "-"}>{run.to_watermark || "-"}</TD>
             <TD>{run.source_row_count ?? "-"}</TD>
             <TD>{run.target_row_count ?? "-"}</TD>
             <TD>{run.rows_loaded ?? "-"}</TD>
@@ -1023,6 +1187,9 @@ function ValidationPanel({ validation }: { validation: TargetValidationResult })
         <span className="text-neutral-600">Overall status</span>
         <Badge tone={badgeTone(validation.status)}>{validation.status}</Badge>
       </div>
+      <p className="mb-3 rounded-md bg-neutral-50 px-3 py-2 text-xs text-neutral-600">
+        Basic validation checks the target table, row count, key nulls, duplicate keys, and optional watermark min/max. Source-target count and checksum validation are future advanced reconciliation options.
+      </p>
       <Table className="table-fixed text-xs">
         <colgroup>
           <col className="w-[230px]" />
