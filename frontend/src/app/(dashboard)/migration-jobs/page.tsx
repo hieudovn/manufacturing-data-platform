@@ -107,6 +107,12 @@ type RunForm = {
   target_min_watermark: string;
   target_max_watermark: string;
   validation_status: string;
+  ora2pg_config_file: string;
+  ora2pg_command: string;
+  ora2pg_log_file: string;
+  source_table_size_gb: string;
+  target_table_size_gb: string;
+  rows_per_second: string;
   log_text: string;
   error_message: string;
 };
@@ -179,6 +185,54 @@ function prettyJson(value: unknown): string {
   } catch {
     return "";
   }
+}
+
+const ORA2PG_METADATA_BEGIN = "--- ora2pg_metadata ---";
+const ORA2PG_METADATA_END = "--- end_ora2pg_metadata ---";
+const ORA2PG_METADATA_FIELDS = [
+  "ora2pg_config_file",
+  "ora2pg_command",
+  "ora2pg_log_file",
+  "source_table_size_gb",
+  "target_table_size_gb",
+  "rows_per_second",
+] as const;
+
+type Ora2pgMetadataField = (typeof ORA2PG_METADATA_FIELDS)[number];
+
+function stripOra2pgMetadata(logText?: string | null): string {
+  if (!logText) return "";
+  const start = logText.indexOf(ORA2PG_METADATA_BEGIN);
+  const end = logText.indexOf(ORA2PG_METADATA_END);
+  if (start === -1 || end === -1 || end < start) return logText;
+  return `${logText.slice(0, start)}${logText.slice(end + ORA2PG_METADATA_END.length)}`.trim();
+}
+
+function parseOra2pgMetadata(logText?: string | null): Record<Ora2pgMetadataField, string> {
+  const metadata = Object.fromEntries(ORA2PG_METADATA_FIELDS.map((field) => [field, ""])) as Record<Ora2pgMetadataField, string>;
+  if (!logText) return metadata;
+  const start = logText.indexOf(ORA2PG_METADATA_BEGIN);
+  const end = logText.indexOf(ORA2PG_METADATA_END);
+  if (start === -1 || end === -1 || end < start) return metadata;
+  const block = logText.slice(start + ORA2PG_METADATA_BEGIN.length, end);
+  for (const line of block.split(/\r?\n/)) {
+    const separator = line.indexOf(":");
+    if (separator === -1) continue;
+    const key = line.slice(0, separator).trim() as Ora2pgMetadataField;
+    const value = line.slice(separator + 1).trim();
+    if (ORA2PG_METADATA_FIELDS.includes(key)) metadata[key] = value;
+  }
+  return metadata;
+}
+
+function buildLogTextWithOra2pgMetadata(form: RunForm): string | null {
+  const baseLog = stripOra2pgMetadata(form.log_text).trim();
+  const lines = ORA2PG_METADATA_FIELDS
+    .map((field) => [field, form[field].trim()] as const)
+    .filter(([, value]) => value)
+    .map(([field, value]) => `${field}: ${value}`);
+  if (lines.length === 0) return baseLog || null;
+  return [baseLog, ORA2PG_METADATA_BEGIN, ...lines, ORA2PG_METADATA_END].filter(Boolean).join("\n");
 }
 
 function errorMessage(error: unknown): string {
@@ -272,6 +326,12 @@ function emptyRunForm(): RunForm {
     target_min_watermark: "",
     target_max_watermark: "",
     validation_status: "not_validated",
+    ora2pg_config_file: "",
+    ora2pg_command: "",
+    ora2pg_log_file: "",
+    source_table_size_gb: "",
+    target_table_size_gb: "",
+    rows_per_second: "",
     log_text: "",
     error_message: "",
   };
@@ -290,6 +350,7 @@ function emptyTemplateForm(template?: MigrationTemplate | null): TemplateForm {
 }
 
 function runFormFromRun(run: MigrationRun): RunForm {
+  const ora2pgMetadata = parseOra2pgMetadata(run.log_text);
   return {
     run_type: run.run_type,
     trigger_type: run.trigger_type,
@@ -308,7 +369,13 @@ function runFormFromRun(run: MigrationRun): RunForm {
     target_min_watermark: run.target_min_watermark || "",
     target_max_watermark: run.target_max_watermark || "",
     validation_status: run.validation_status || "not_validated",
-    log_text: run.log_text || "",
+    ora2pg_config_file: ora2pgMetadata.ora2pg_config_file,
+    ora2pg_command: ora2pgMetadata.ora2pg_command,
+    ora2pg_log_file: ora2pgMetadata.ora2pg_log_file,
+    source_table_size_gb: ora2pgMetadata.source_table_size_gb,
+    target_table_size_gb: ora2pgMetadata.target_table_size_gb,
+    rows_per_second: ora2pgMetadata.rows_per_second,
+    log_text: stripOra2pgMetadata(run.log_text),
     error_message: run.error_message || "",
   };
 }
@@ -744,7 +811,7 @@ export default function MigrationJobsPage() {
       target_min_watermark: runForm.target_min_watermark.trim() || null,
       target_max_watermark: runForm.target_max_watermark.trim() || null,
       validation_status: runForm.validation_status || "not_validated",
-      log_text: runForm.log_text.trim() || null,
+      log_text: buildLogTextWithOra2pgMetadata(runForm),
       error_message: runForm.error_message.trim() || null,
     };
   }
@@ -1002,6 +1069,19 @@ export default function MigrationJobsPage() {
             <Input label="Source Row Count" value={runForm.source_row_count} onChange={(e) => setRunValue("source_row_count", e.target.value)} disabled={readOnly} />
             <Input label="Target Row Count" value={runForm.target_row_count} onChange={(e) => setRunValue("target_row_count", e.target.value)} disabled={readOnly} />
             <Input label="Rows Loaded" value={runForm.rows_loaded} onChange={(e) => setRunValue("rows_loaded", e.target.value)} disabled={readOnly} />
+          </div>
+        </Section>
+        <Section
+          title="ora2pg Pilot Metadata"
+          subtitle="Optional fields copied from the real ora2pg run. Stored in the run log so no schema migration is needed."
+        >
+          <div className="grid gap-3 md:grid-cols-2">
+            <Input label="ora2pg Config File" value={runForm.ora2pg_config_file} onChange={(e) => setRunValue("ora2pg_config_file", e.target.value)} placeholder="/opt/ora2pg/jde_supplier.conf" disabled={readOnly} />
+            <Input label="ora2pg Log File" value={runForm.ora2pg_log_file} onChange={(e) => setRunValue("ora2pg_log_file", e.target.value)} placeholder="/var/log/ora2pg/jde_supplier.log" disabled={readOnly} />
+            <Input label="Source Table Size GB" value={runForm.source_table_size_gb} onChange={(e) => setRunValue("source_table_size_gb", e.target.value)} placeholder="30" disabled={readOnly} />
+            <Input label="Target Table Size GB" value={runForm.target_table_size_gb} onChange={(e) => setRunValue("target_table_size_gb", e.target.value)} placeholder="30" disabled={readOnly} />
+            <Input label="Rows Per Second" value={runForm.rows_per_second} onChange={(e) => setRunValue("rows_per_second", e.target.value)} placeholder="2500" disabled={readOnly} />
+            <Input label="ora2pg Command" value={runForm.ora2pg_command} onChange={(e) => setRunValue("ora2pg_command", e.target.value)} placeholder="ora2pg -c /opt/ora2pg/jde_supplier.conf" disabled={readOnly} />
           </div>
         </Section>
         <Section title="Scope & Watermark">
@@ -1382,17 +1462,72 @@ function RunTable({
 }
 
 function ValidationPanel({ validation }: { validation: TargetValidationResult }) {
+  const checks = Object.fromEntries(validation.validations.map((item) => [item.check_name, item]));
+  const pkChecks = validation.validations.filter(
+    (item) => item.check_name.startsWith("primary_key_column:")
+      || item.check_name.startsWith("primary_key_null_count:")
+      || item.check_name === "primary_key_duplicate_count",
+  );
+  const watermarkChecks = validation.validations.filter((item) => item.check_name.includes("watermark"));
   return (
     <Section
-      title="Target Validation"
+      title="Validation Report"
       subtitle={`${validation.target_schema}.${validation.target_table} - ${validation.target_row_count ?? "-"} rows`}
     >
-      <div className="mb-3 flex items-center gap-2 text-sm">
-        <span className="text-neutral-600">Overall status</span>
+      <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
+        <span className="text-neutral-600">Overall validation</span>
+        <Badge tone={badgeTone(validation.validation_status)}>{validation.validation_status}</Badge>
+        <span className="text-neutral-400">API result</span>
         <Badge tone={badgeTone(validation.status)}>{validation.status}</Badge>
       </div>
+      <div className="mb-3 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+        <ReportMetric
+          label="Target Table"
+          value={checks.target_table_exists?.target_value || `${validation.target_schema}.${validation.target_table}`}
+          status={checks.target_table_exists?.status}
+        />
+        <ReportMetric label="Source Rows" value={validation.source_row_count ?? "-"} status={validation.source_row_count == null ? "warning" : "pass"} />
+        <ReportMetric label="Target Rows" value={validation.target_row_count ?? "-"} status={checks.target_row_count?.status} />
+        <ReportMetric
+          label="Source vs Target"
+          value={validation.row_count_match == null ? "Not provided" : validation.row_count_match ? "Match" : "Mismatch"}
+          status={validation.row_count_match == null ? "warning" : validation.row_count_match ? "pass" : "fail"}
+        />
+      </div>
+      <div className="mb-3 grid gap-3 md:grid-cols-2">
+        <div className="rounded-md border border-neutral-100 bg-neutral-50 p-3">
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">Primary Key Integrity</div>
+          {pkChecks.length === 0 ? (
+            <p className="text-xs text-neutral-500">No primary key columns configured for this migration job.</p>
+          ) : (
+            <div className="space-y-1">
+              {pkChecks.map((check) => (
+                <div key={check.id} className="flex items-center justify-between gap-2 text-xs">
+                  <span className="truncate font-mono" title={check.check_name}>{check.check_name}</span>
+                  <Badge tone={badgeTone(check.status)}>{check.target_value ?? check.status}</Badge>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="rounded-md border border-neutral-100 bg-neutral-50 p-3">
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">Watermark Range</div>
+          {watermarkChecks.length === 0 ? (
+            <p className="text-xs text-neutral-500">No watermark column configured for this migration job.</p>
+          ) : (
+            <div className="space-y-1">
+              {watermarkChecks.map((check) => (
+                <div key={check.id} className="flex items-center justify-between gap-2 text-xs">
+                  <span className="truncate font-mono" title={check.check_name}>{check.check_name}</span>
+                  <Badge tone={badgeTone(check.status)}>{check.target_value ?? check.status}</Badge>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
       <p className="mb-3 rounded-md bg-neutral-50 px-3 py-2 text-xs text-neutral-600">
-        Basic validation checks the target table, row count, key nulls, duplicate keys, and optional watermark min/max. Source-target count and checksum validation are future advanced reconciliation options.
+        This report is target-side and presentation-ready for pilot/UAT. When source row count is recorded from ora2pg logs, MDP compares it with PostgreSQL target row count. Checksums and source-side reconciliation remain future advanced controls.
       </p>
       <Table className="table-fixed text-xs">
         <colgroup>
@@ -1424,5 +1559,27 @@ function ValidationPanel({ validation }: { validation: TargetValidationResult })
         </TBody>
       </Table>
     </Section>
+  );
+}
+
+function ReportMetric({
+  label,
+  value,
+  status,
+}: {
+  label: string;
+  value: unknown;
+  status?: string | null;
+}) {
+  return (
+    <div className="rounded-md border border-neutral-100 bg-neutral-50 px-3 py-2">
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">{label}</span>
+        {status && <Badge tone={badgeTone(status)}>{status}</Badge>}
+      </div>
+      <div className="truncate text-sm font-medium text-neutral-900" title={cellText(value)}>
+        {cellText(value)}
+      </div>
+    </div>
   );
 }

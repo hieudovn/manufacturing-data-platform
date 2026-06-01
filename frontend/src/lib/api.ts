@@ -552,10 +552,13 @@ export type MigrationValidation = {
 };
 export type TargetValidationResult = {
   status: string;
+  validation_status: string;
   migration_run_id: string;
   target_schema: string;
   target_table: string;
+  source_row_count: number | null;
   target_row_count: number | null;
+  row_count_match: boolean | null;
   validations: MigrationValidation[];
   sample_rows: Record<string, unknown>[];
 };

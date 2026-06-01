@@ -136,6 +136,47 @@ When a run is marked `success`, MDP updates the parent job:
 
 When a run is marked `failed`, MDP updates `last_run_at` but does not advance `last_successful_watermark`.
 
+## Recording Real Ora2pg Pilot Results
+
+For production pilots, run ora2pg on the migration server and then record the result in MDP as a Migration Run.
+
+Recommended fields to capture:
+
+- `started_at`
+- `finished_at`
+- `duration_seconds`
+- `source_row_count`
+- `target_row_count`, if known before validation
+- `rows_loaded`
+- `from_watermark`
+- `to_watermark`
+- `validation_status`
+- `log_text`
+- `error_message`, if the run failed
+
+The UI also provides optional ora2pg pilot metadata fields. These are stored in `log_text` as a structured block so the database schema does not need to change for tool-specific metadata:
+
+- `ora2pg_config_file`
+- `ora2pg_command`
+- `ora2pg_log_file`
+- `source_table_size_gb`
+- `target_table_size_gb`
+- `rows_per_second`
+
+Example pilot record:
+
+```text
+Tool: ora2pg
+Source: Oracle JDE PRODDTA.F4311
+Target: mdp_staging.stg_jde_po_line
+Source rows: 30,000,000
+Rows loaded: 30,000,000
+Source size: 30 GB
+Duration: 3-4 hours
+```
+
+This is the recommended pattern: ora2pg performs the heavy load; MDP records the operational result, validates the target table, and governs downstream Type B APIs.
+
 ## Migration Scope
 
 Migration Jobs can define operational scope before any actual migration tool is run.
@@ -232,6 +273,7 @@ Checks include:
 - target schema exists
 - target table exists
 - target row count
+- source row count comparison, when `source_row_count` is recorded on the run
 - configured primary key columns exist
 - primary key null count
 - duplicate key count
@@ -248,8 +290,37 @@ Target validation is intended to answer:
 - Are key columns present?
 - Are key columns null?
 - Are duplicate keys visible?
+- Does the target row count match the source row count copied from ora2pg logs?
 - Can administrators preview sample rows before creating Type B models?
 - If a watermark column is configured, what min/max watermark values exist in the target?
+
+## Validation Report
+
+The Migration Jobs UI includes a `Validation Report` for each validated run. The report is designed for pilot/UAT review with customer stakeholders.
+
+It shows:
+
+- target table existence
+- PostgreSQL target row count
+- source row count, if provided from ora2pg logs
+- source-vs-target row count match or mismatch
+- primary key column existence
+- primary key null count
+- duplicate key count
+- watermark min/max values, when configured
+- overall validation status
+
+If `source_row_count` is available and equals the PostgreSQL target row count, the source-target row count check passes. If the counts differ, validation fails because the target result does not reconcile with the recorded external source count.
+
+Recommended validation after a large migration:
+
+1. Record the ora2pg run with source count, rows loaded, duration, and log path.
+2. Run target validation in MDP.
+3. Confirm source and target row counts match.
+4. Confirm primary key null count is zero.
+5. Confirm duplicate key count is zero.
+6. Confirm watermark min/max values are reasonable if a watermark column is configured.
+7. Create or preview Type B models only after the staging target is validated.
 
 ## Data Integrity Validation Levels
 

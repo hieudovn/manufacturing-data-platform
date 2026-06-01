@@ -98,7 +98,15 @@ def test_validate_target_table_counts_seeded_rows(
     run_response = client.post(
         f"/migration-jobs/{job['id']}/runs",
         headers=auth_headers,
-        json={"run_type": "external_bulk", "trigger_type": "external", "status": "success"},
+        json={
+            "run_type": "external_bulk",
+            "trigger_type": "external",
+            "status": "success",
+            "source_row_count": 5,
+            "rows_loaded": 5,
+            "duration_seconds": 14400,
+            "log_text": "ora2pg pilot: 30GB class table completed in 3-4 hours",
+        },
     )
     run = run_response.json()
 
@@ -107,10 +115,16 @@ def test_validate_target_table_counts_seeded_rows(
     assert response.status_code == 200, response.text
     data = response.json()
     assert data["status"] == "success"
+    assert data["validation_status"] == "pass"
+    assert data["source_row_count"] == 5
     assert data["target_row_count"] == 5
+    assert data["row_count_match"] is True
     assert len(data["sample_rows"]) > 0
     checks = {validation["check_name"]: validation for validation in data["validations"]}
     assert checks["target_table_exists"]["status"] == "pass"
+    assert checks["source_target_row_count"]["status"] == "pass"
+    assert checks["source_target_row_count"]["source_value"] == "5"
+    assert checks["source_target_row_count"]["target_value"] == "5"
     assert checks["primary_key_null_count:supplier_code"]["target_value"] == "0"
     assert checks["primary_key_duplicate_count"]["target_value"] == "0"
     assert checks["watermark_column:updated_at"]["status"] == "pass"
@@ -119,6 +133,42 @@ def test_validate_target_table_counts_seeded_rows(
     assert run_detail.status_code == 200
     assert run_detail.json()["validation_status"] == "pass"
     assert run_detail.json()["target_max_watermark"] is not None
+
+
+def test_validate_target_table_warns_on_source_target_row_count_mismatch(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    db_session: Session,
+) -> None:
+    seed_procurement_staging_data(db_session)
+    db_session.commit()
+    job = create_job(client, auth_headers, "jde_supplier_count_mismatch")
+    run_response = client.post(
+        f"/migration-jobs/{job['id']}/runs",
+        headers=auth_headers,
+        json={
+            "run_type": "external_bulk",
+            "trigger_type": "external",
+            "status": "success",
+            "source_row_count": 30_000_000,
+            "rows_loaded": 30_000_000,
+            "duration_seconds": 14400,
+            "log_text": "ora2pg source count copied from pilot log",
+        },
+    )
+    run = run_response.json()
+
+    response = client.post(f"/migration-runs/{run['id']}/validate-target", headers=auth_headers)
+
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["status"] == "failed"
+    assert data["validation_status"] == "fail"
+    assert data["row_count_match"] is False
+    checks = {validation["check_name"]: validation for validation in data["validations"]}
+    assert checks["source_target_row_count"]["status"] == "fail"
+    assert checks["source_target_row_count"]["source_value"] == "30000000"
+    assert checks["source_target_row_count"]["target_value"] == "5"
 
 
 def test_validate_target_table_missing_table_fails(

@@ -198,10 +198,13 @@ class MigrationJobRead(MigrationJobBase):
 
 class TargetValidationResponse(BaseModel):
     status: str
+    validation_status: str
     migration_run_id: uuid.UUID
     target_schema: str
     target_table: str
+    source_row_count: int | None
     target_row_count: int | None
+    row_count_match: bool | None
     validations: list[MigrationValidationRead]
     sample_rows: list[dict[str, Any]]
 

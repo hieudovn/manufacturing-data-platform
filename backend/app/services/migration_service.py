@@ -293,6 +293,20 @@ def validate_target_table(db: Session, run: MigrationRun) -> dict[str, Any]:
             validations.append(
                 _validation(run.id, "target_row_count", status="pass", target_value=str(target_row_count))
             )
+            if run.source_row_count is not None:
+                row_counts_match = run.source_row_count == target_row_count
+                validations.append(
+                    _validation(
+                        run.id,
+                        "source_target_row_count",
+                        status="pass" if row_counts_match else "fail",
+                        source_value=str(run.source_row_count),
+                        target_value=str(target_row_count),
+                        message=None
+                        if row_counts_match
+                        else "Source row count does not match target row count from PostgreSQL validation",
+                    )
+                )
             for column in primary_key_columns:
                 if column not in columns:
                     validations.append(
@@ -387,12 +401,18 @@ def validate_target_table(db: Session, run: MigrationRun) -> dict[str, Any]:
     )
     validation_status = _validation_status(saved_validations)
     status = "success" if validation_status in {"pass", "warning"} else "failed"
+    row_count_match = None
+    if run.source_row_count is not None and target_row_count is not None:
+        row_count_match = run.source_row_count == target_row_count
     return {
         "status": status,
+        "validation_status": validation_status,
         "migration_run_id": run.id,
         "target_schema": target_schema,
         "target_table": target_table,
+        "source_row_count": run.source_row_count,
         "target_row_count": target_row_count,
+        "row_count_match": row_count_match,
         "validations": saved_validations,
         "sample_rows": sample_rows,
     }
