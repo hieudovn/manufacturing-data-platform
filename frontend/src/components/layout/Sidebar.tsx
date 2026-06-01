@@ -47,9 +47,7 @@ export function Sidebar() {
             alt="Avenue MDP"
             className="mx-auto mb-2 block h-auto w-4/5 object-contain"
           />
-          <p className="text-base font-bold tracking-wide text-neutral-900">Avenue MDP</p>
         </div>
-        <p className="mt-0.5 text-xs text-neutral-400">Manufacturing Data Platform</p>
       </div>
 
       {/* Primary nav */}

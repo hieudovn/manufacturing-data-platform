@@ -49,7 +49,6 @@ export default function LoginPage() {
               alt="Avenue MDP"
               className="mx-auto mb-3 block h-auto w-4/5 object-contain"
             />
-            <h1 className="text-xl font-bold tracking-wide text-neutral-900">Avenue MDP</h1>
           </div>
           <p className="mt-1 text-sm text-neutral-400">Sign in to continue</p>
         </div>
