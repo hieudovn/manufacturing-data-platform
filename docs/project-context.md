@@ -78,7 +78,10 @@ This creates a controlled data service layer between source systems and consumin
 - Type B Linked Data Model backend
 - Type B Mapping UI
 - Type B outbound API
-- Migration Job Registry for ora2pg/external bulk-load tracking
+- Migration Job Registry
+- External ora2pg migration tracking
+- Migration run history
+- PostgreSQL target staging validation
 - Data Browser
 - Transaction Monitor
 - Admin UI consolidation
@@ -178,9 +181,10 @@ The MVP includes mock procurement staging data that simulates migrated Oracle JD
 ## 14. Important Architecture Decisions
 
 - Use Type B models with staging tables/views instead of querying ERP directly.
-- Use ora2pg or another external bulk loader for large JDE/Oracle initial loads into PostgreSQL staging.
-- Do not run 30M+ row full-load migrations inside FastAPI request handlers or Python ORM loops.
-- MDP tracks migration jobs, records external run results, validates target staging tables, and then exposes data through Type B models.
+- Large JDE Oracle initial full-load migrations should use ora2pg or external bulk loaders.
+- MDP does not run 30M+ row migrations inside FastAPI request handlers.
+- MDP tracks external migration jobs/runs and validates `mdp_staging` targets.
+- After validation, Type B models expose migrated staging data through governed outbound APIs.
 - Use PostgreSQL views for multi-table curated objects such as `purchase_order_summary`.
 - Do not implement a multi-table Type B join engine in the MVP.
 - Keep IIoT and time-series storage out of this Manufacturing Data Platform MVP.
@@ -229,16 +233,12 @@ Direction:
 
 ## 17. Current Recommended Next Steps
 
-1. Finish UI cleanup if needed.
-2. Create UAT/training script.
-3. Review the migrated Next.js frontend against the current demo flow.
-4. Add or refine frontend smoke tests.
-5. Harden production secrets and server operations during deployment rehearsal.
-6. Deploy to a cloud server.
-7. Validate Caddy `/api` routing and HTTPS.
-8. Validate PostgreSQL backup/restore on the target server.
-9. Add release/version tagging.
-10. Later: Oracle JDE source browsing, ora2pg worker orchestration, and sync jobs.
+1. Harden Migration Jobs if needed.
+2. Add JDE Procurement Migration Templates.
+3. Run UAT with real ora2pg migrated JDE staging data.
+4. Create Type B models from real JDE staging.
+5. Cloud deployment.
+6. Later: incremental sync, scheduler, migration worker, WSO2 integration adapter.
 
 ## 18. Deferred Future Phases
 

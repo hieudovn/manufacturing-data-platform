@@ -15,6 +15,8 @@ Authentication is implemented with bcrypt password hashing and JWT bearer tokens
 
 For a concise project context snapshot covering product vision, architecture, completed capabilities, design decisions, and roadmap, see [docs/project-context.md](docs/project-context.md).
 
+For the external ora2pg migration tracking strategy, see [docs/migration-jobs.md](docs/migration-jobs.md).
+
 ## Local Setup
 
 Prerequisites:
@@ -589,7 +591,7 @@ Important rule:
 MDP does not replace ora2pg for 30M+ row initial loads.
 ```
 
-Use ora2pg or another external bulk loader for high-volume full loads. Avenue MDP stores the job metadata, records run results, validates target staging tables, and then exposes the migrated data through Type B Linked Data Models and governed outbound APIs.
+Use ora2pg or another external bulk loader for high-volume full loads. Avenue MDP stores the job metadata, records run results, validates target staging tables, and then exposes the migrated data through Type B Linked Data Models and governed outbound APIs. Detailed guidance is in [docs/migration-jobs.md](docs/migration-jobs.md).
 
 Authenticated APIs:
 

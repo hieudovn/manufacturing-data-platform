@@ -98,6 +98,16 @@ Optional pgAdmin profile, bound only to server localhost:
 docker compose -f docker-compose.prod.yml --env-file .env.production --profile admin up -d pgadmin
 ```
 
+## Large JDE / Oracle Migrations
+
+Do not run long Oracle/JDE full-load migrations inside the FastAPI API container.
+
+For large initial loads, use ora2pg or another external bulk loader outside the web request path. Load data into PostgreSQL staging tables such as `mdp_staging.stg_jde_supplier`, then register the work in `Migration Jobs`, record the external run result, and validate the target table from MDP.
+
+Future production deployments may add a dedicated worker container to invoke ora2pg safely outside FastAPI request handlers. Until then, run ora2pg externally and use MDP for tracking, validation, Type B mapping, governed APIs, and audit visibility.
+
+See [migration-jobs.md](migration-jobs.md).
+
 ## Backup
 
 Create a timestamped PostgreSQL dump under `backups/`:
