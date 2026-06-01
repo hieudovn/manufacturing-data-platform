@@ -344,6 +344,52 @@ Testing behavior:
 - SQL Server returns a clear unavailable-driver message when `pyodbc` or an ODBC driver is missing.
 - MQTT validates metadata only in this milestone.
 
+## Migration Jobs
+
+Migration Job endpoints require JWT authentication. They track external migration work such as ora2pg full loads from Oracle JDE into PostgreSQL staging.
+
+MDP does not execute large JDE/Oracle full-load migrations inside FastAPI. For high-volume tables, run ora2pg or another external bulk loader outside the web API, then record the run and validate the target staging table.
+
+Job endpoints:
+
+- `POST /migration-jobs`
+- `GET /migration-jobs`
+- `GET /migration-jobs/{id}`
+- `PUT /migration-jobs/{id}`
+- `DELETE /migration-jobs/{id}`
+
+Run endpoints:
+
+- `POST /migration-jobs/{id}/runs`
+- `GET /migration-jobs/{id}/runs`
+- `GET /migration-runs/{id}`
+- `PUT /migration-runs/{id}`
+
+Target validation:
+
+- `POST /migration-runs/{id}/validate-target`
+
+Supported migration tools:
+
+- `ora2pg`
+- `manual`
+- `external_tool`
+- `native_small_table`
+
+`native_small_table` is reserved for small manual tests only and is not the recommended path for production JDE full loads.
+
+Target validation checks only PostgreSQL staging targets:
+
+- target schema exists
+- target table exists
+- target row count
+- configured primary key columns exist
+- primary key null count
+- duplicate key group count
+- first 10 sample rows
+
+Source row counts should be copied from ora2pg or external loader logs. Validation does not scan huge Oracle source tables by default.
+
 ## Demo Procurement Staging
 
 Demo staging endpoints require JWT authentication:

@@ -22,9 +22,9 @@ Dynamic outbound REST APIs expose integrated Type A data through model-based end
 
 Inbound and outbound APIs accept either a valid user JWT or a scoped API key. API keys can be limited by direction and data model.
 
-The Connection Manager stores external system connection metadata for PostgreSQL, Oracle, SQL Server, REST API, and MQTT endpoints. Passwords are encrypted before storage and are never returned by API responses. These records are intended for later sync jobs, mapping, migration, and Type B linked model features.
+The Connection Manager stores external system connection metadata for PostgreSQL, Oracle, SQL Server, REST API, and MQTT endpoints. Passwords are encrypted before storage and are never returned by API responses. These records are intended for later source browsing, sync jobs, mapping, migration tracking, and Type B linked model features.
 
-The `mdp_staging` PostgreSQL schema contains mock JDE procurement staging tables for MVP demos. These tables represent data already migrated by an external ETL tool and will later support Type B linked data models.
+The `mdp_staging` PostgreSQL schema contains mock JDE procurement staging tables for MVP demos. These tables represent data already migrated by an external ETL or bulk migration tool and support Type B linked data models.
 
 The DB Browser provides JWT-protected, read-only metadata and preview access to verified PostgreSQL schemas and tables. It is intended to help administrators inspect staging data before defining Type B Linked Data Models.
 
@@ -44,7 +44,11 @@ Data is persisted in the Docker named volume `postgres_data`.
 
 ### Migration Layer
 
-Alembic manages the current `users` and `data_models` application tables. Generated Type A storage tables are created by the application service at model creation time.
+Alembic manages platform metadata tables, including users, data models, API keys, connections, transactions, and migration registry tables. Generated Type A storage tables are created by the application service at model creation time.
+
+Large JDE/Oracle initial loads are intentionally external to FastAPI. Avenue MDP does not replace ora2pg for 30M+ row tables and does not run long row-by-row migrations inside request handlers. Instead, the Migration Job Registry records external ora2pg/manual run metadata, tracks run status and row counts from logs, and validates the PostgreSQL staging target after data lands in `mdp_staging`.
+
+Target validation checks that the configured staging schema/table exists, counts rows, verifies configured primary key columns, reports primary key nulls or duplicates, and returns a small sample preview. Future phases may add a worker container to invoke ora2pg safely outside the web API.
 
 ### pgAdmin
 
@@ -67,6 +71,8 @@ Implemented:
 - Transaction logging and transaction read APIs
 - API key management and scoped API key authentication
 - Connection metadata CRUD and basic connection testing
+- Migration job and run tracking for external ora2pg/bulk-loader migrations
+- PostgreSQL staging target validation for migration runs
 - Mock JDE procurement staging tables and seed data
 - DB Table Browser for schemas, tables, columns, and preview rows
 - Type B mapping validation and mapped preview backend APIs
@@ -83,7 +89,9 @@ Explicitly deferred:
 - Generated table archival/drop policy
 - API key rotation workflows
 - External API key self-service
+- Long-running ora2pg execution from FastAPI
 - Connection-driven sync jobs
+- Native large-table Python/ORM migration
 - External table browsing
 - ERP and SQL Server integration
 - Time-series databases, TimescaleDB, IIoT, sensor data, and realtime telemetry

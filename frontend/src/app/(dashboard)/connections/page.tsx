@@ -59,6 +59,7 @@ export default function ConnectionsPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
+  const [configJson, setConfigJson] = useState("");
   const [desc, setDesc] = useState("");
   const [busy, setBusy] = useState(false);
   const [formErr, setFormErr] = useState<string | null>(null);
@@ -72,6 +73,7 @@ export default function ConnectionsPage() {
     setUsername("");
     setPassword("");
     setBaseUrl("");
+    setConfigJson("");
     setDesc("");
     setFormErr(null);
     setOpen(true);
@@ -80,12 +82,47 @@ export default function ConnectionsPage() {
   const isDb = DB_TYPES.includes(type);
   const isRest = type === "rest_api";
   const isMqtt = type === "mqtt";
+  const isOracle = type === "oracle";
+
+  function changeType(next: ConnType) {
+    setType(next);
+    if (next === "oracle") {
+      setPort((current) => current || "1521");
+      setConfigJson((current) =>
+        current ||
+        JSON.stringify(
+          {
+            oracle_connect_mode: "service_name",
+            service_name: "",
+            schema: "PRODDTA",
+          },
+          null,
+          2,
+        ),
+      );
+    } else if (next === "postgresql") {
+      setPort((current) => current || "5432");
+    } else if (next === "sqlserver") {
+      setPort((current) => current || "1433");
+    } else if (next === "mqtt") {
+      setPort((current) => current || "1883");
+    }
+  }
 
   async function save() {
     setFormErr(null);
     if (!name.trim()) {
       setFormErr("Name is required.");
       return;
+    }
+    let parsedConfig: Record<string, unknown> | null = null;
+    if (configJson.trim()) {
+      try {
+        parsedConfig = JSON.parse(configJson);
+      } catch {
+        setFormErr("Config JSON is invalid.");
+        return;
+      }
     }
     const body: Record<string, unknown> = { name: name.trim(), type, description: desc.trim() || null };
     if (isDb || isMqtt) {
@@ -97,6 +134,7 @@ export default function ConnectionsPage() {
       body.username = username.trim();
       if (password) body.password = password;
     }
+    if (parsedConfig) body.config = parsedConfig;
     if (isRest) body.base_url = baseUrl.trim();
     setBusy(true);
     try {
@@ -212,7 +250,7 @@ export default function ConnectionsPage() {
           {formErr && <p className="rounded-md bg-danger/10 px-3 py-2 text-sm text-danger">{formErr}</p>}
           <div className="grid grid-cols-2 gap-3">
             <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} placeholder="jde-prod" />
-            <Select label="Type" value={type} onChange={(e) => setType(e.target.value as ConnType)}>
+            <Select label="Type" value={type} onChange={(e) => changeType(e.target.value as ConnType)}>
               {CONNECTION_TYPES.map((t) => (
                 <option key={t} value={t}>
                   {t}
@@ -223,13 +261,24 @@ export default function ConnectionsPage() {
           {(isDb || isMqtt) && (
             <div className="grid grid-cols-2 gap-3">
               <Input label="Host" value={host} onChange={(e) => setHost(e.target.value)} placeholder="10.0.0.5" />
-              <Input label="Port" value={port} onChange={(e) => setPort(e.target.value)} placeholder={isMqtt ? "1883" : "5432"} />
+              <Input
+                label="Port"
+                value={port}
+                onChange={(e) => setPort(e.target.value)}
+                placeholder={isMqtt ? "1883" : isOracle ? "1521" : type === "sqlserver" ? "1433" : "5432"}
+              />
             </div>
           )}
           {isDb && (
             <>
               <div className="grid grid-cols-2 gap-3">
-                <Input label="Database" value={database} onChange={(e) => setDatabase(e.target.value)} placeholder="prod" />
+                <Input
+                  label={isOracle ? "Service name / Database" : "Database"}
+                  value={database}
+                  onChange={(e) => setDatabase(e.target.value)}
+                  placeholder={isOracle ? "JDEPRD" : "prod"}
+                  hint={isOracle ? "Default Oracle connect mode uses this as service_name." : undefined}
+                />
                 <Input label="Username" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="reader" />
               </div>
               <Input
@@ -239,10 +288,31 @@ export default function ConnectionsPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="********"
               />
+              {isOracle && (
+                <p className="rounded-md bg-info/10 px-3 py-2 text-xs text-info">
+                  For Oracle JDE, enter host, port 1521, service name, schema such as PRODDTA, username and password.
+                  python-oracledb thin mode is used by default.
+                </p>
+              )}
             </>
           )}
           {isRest && (
             <Input label="Base URL" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://api.example.com" />
+          )}
+          {(isDb || isMqtt) && (
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-neutral-700">Config JSON (optional)</span>
+              <textarea
+                value={configJson}
+                onChange={(e) => setConfigJson(e.target.value)}
+                placeholder={
+                  isOracle
+                    ? '{\n  "oracle_connect_mode": "service_name",\n  "service_name": "JDEPRD",\n  "schema": "PRODDTA"\n}'
+                    : "{}"
+                }
+                className="min-h-28 w-full rounded-md border border-neutral-300 bg-white px-3 py-2 font-mono text-xs text-neutral-900 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30"
+              />
+            </label>
           )}
           <Input label="Description (optional)" value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="JDE production database" />
         </div>

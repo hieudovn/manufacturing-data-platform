@@ -409,6 +409,7 @@ export type Connection = {
   username: string | null;
   base_url: string | null;
   mqtt_topic_prefix: string | null;
+  config?: Record<string, unknown> | null;
   status: string;
   created_at: string;
   updated_at: string;
@@ -426,6 +427,86 @@ export const deleteConnection = (id: string) =>
   req<Connection>(`/connections/${id}`, { method: "DELETE" });
 export const testConnection = (id: string) =>
   req<ConnectionTestResult>(`/connections/${id}/test`, { method: "POST" });
+
+// Migration Jobs
+export const MIGRATION_TOOLS = ["ora2pg", "manual", "external_tool", "native_small_table"] as const;
+export const MIGRATION_SOURCE_TYPES = ["oracle", "postgresql", "sqlserver", "external"] as const;
+export const MIGRATION_LOAD_MODES = ["full_load", "incremental", "external_bulk", "validation_only"] as const;
+export const MIGRATION_RUN_STATUSES = ["pending", "running", "success", "failed", "cancelled"] as const;
+export type MigrationJob = {
+  id: string;
+  name: string;
+  description: string | null;
+  source_system: string | null;
+  source_connection_id: string | null;
+  source_type: string;
+  migration_tool: string;
+  source_schema: string | null;
+  source_table: string | null;
+  target_schema: string;
+  target_table: string;
+  estimated_rows: number | null;
+  estimated_size_gb: number | null;
+  primary_key_columns: string[] | null;
+  load_mode: string;
+  status: string;
+  config: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+  latest_run_status?: string | null;
+  latest_target_row_count?: number | null;
+};
+export type MigrationRun = {
+  id: string;
+  migration_job_id: string;
+  run_type: string;
+  trigger_type: string;
+  started_at: string | null;
+  finished_at: string | null;
+  status: string;
+  source_row_count: number | null;
+  target_row_count: number | null;
+  rows_loaded: number | null;
+  duration_seconds: number | null;
+  log_text: string | null;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
+};
+export type MigrationValidation = {
+  id: string;
+  migration_run_id: string;
+  check_name: string;
+  source_value: string | null;
+  target_value: string | null;
+  status: string;
+  message: string | null;
+  created_at: string;
+};
+export type TargetValidationResult = {
+  status: string;
+  migration_run_id: string;
+  target_schema: string;
+  target_table: string;
+  target_row_count: number | null;
+  validations: MigrationValidation[];
+  sample_rows: Record<string, unknown>[];
+};
+export const listMigrationJobs = () => req<MigrationJob[]>("/migration-jobs");
+export const createMigrationJob = (body: Record<string, unknown>) =>
+  req<MigrationJob>("/migration-jobs", { method: "POST", body: JSON.stringify(body) });
+export const updateMigrationJob = (id: string, body: Record<string, unknown>) =>
+  req<MigrationJob>(`/migration-jobs/${id}`, { method: "PUT", body: JSON.stringify(body) });
+export const deleteMigrationJob = (id: string) =>
+  req<MigrationJob>(`/migration-jobs/${id}`, { method: "DELETE" });
+export const listMigrationRuns = (jobId: string) =>
+  req<MigrationRun[]>(`/migration-jobs/${jobId}/runs`);
+export const createMigrationRun = (jobId: string, body: Record<string, unknown>) =>
+  req<MigrationRun>(`/migration-jobs/${jobId}/runs`, { method: "POST", body: JSON.stringify(body) });
+export const updateMigrationRun = (id: string, body: Record<string, unknown>) =>
+  req<MigrationRun>(`/migration-runs/${id}`, { method: "PUT", body: JSON.stringify(body) });
+export const validateMigrationTarget = (runId: string) =>
+  req<TargetValidationResult>(`/migration-runs/${runId}/validate-target`, { method: "POST" });
 
 // Transactions
 export type Transaction = {

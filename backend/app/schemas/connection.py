@@ -25,7 +25,7 @@ class ConnectionBase(BaseModel):
 
     @model_validator(mode="after")
     def validate_required_fields(self) -> "ConnectionBase":
-        if self.type in DATABASE_CONNECTION_TYPES:
+        if self.type in {"postgresql", "sqlserver"}:
             missing = [
                 field
                 for field in ("host", "port", "database_name", "username")
@@ -35,6 +35,33 @@ class ConnectionBase(BaseModel):
                 raise ValueError(
                     f"{self.type} connections require: {', '.join(missing)}"
                 )
+        if self.type == "oracle":
+            config = self.config if isinstance(self.config, dict) else {}
+            mode = str(config.get("oracle_connect_mode") or "service_name").lower()
+            if mode not in {"service_name", "sid", "dsn"}:
+                raise ValueError(
+                    "oracle config oracle_connect_mode must be one of: service_name, sid, dsn"
+                )
+            missing = [
+                field
+                for field in ("username",)
+                if getattr(self, field) in (None, "")
+            ]
+            if mode == "dsn":
+                if not config.get("dsn"):
+                    missing.append("config.dsn")
+            else:
+                for field in ("host", "port"):
+                    if getattr(self, field) in (None, ""):
+                        missing.append(field)
+                if mode == "service_name" and not (
+                    config.get("service_name") or self.database_name
+                ):
+                    missing.append("service_name or database_name")
+                if mode == "sid" and not (config.get("sid") or self.database_name):
+                    missing.append("sid or database_name")
+            if missing:
+                raise ValueError(f"oracle connections require: {', '.join(missing)}")
         if self.type == "rest_api" and self.base_url is None:
             raise ValueError("rest_api connections require base_url")
         if self.type == "mqtt":

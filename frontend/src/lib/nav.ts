@@ -6,6 +6,7 @@ import {
   Plug,
   Repeat,
   Cable,
+  ArrowRightLeft,
   UserRound,
   Palette,
   Users,
@@ -29,6 +30,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/apis", label: "API Keys", desc: "External access keys", icon: Plug },
   { href: "/transactions", label: "Transactions", desc: "Ingest / outbound log", icon: Repeat },
   { href: "/connections", label: "Connections", desc: "External systems", icon: Cable },
+  { href: "/migration-jobs", label: "Migration Jobs", desc: "ora2pg tracking", icon: ArrowRightLeft },
   { href: "/users", label: "Users", desc: "Accounts & roles", icon: Users, adminOnly: true },
   { href: "/profile", label: "Profile", desc: "Sign-in & identity", icon: UserRound },
 ];

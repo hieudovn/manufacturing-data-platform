@@ -33,6 +33,8 @@ Avenue MDP provides a governed abstraction layer over manufacturing and enterpri
 - Data Models define governed business objects.
 - Type A models ingest data and generate storage tables.
 - Type B models link to existing staging tables or views.
+- External bulk loaders such as ora2pg perform high-volume JDE/Oracle initial loads into PostgreSQL staging.
+- Migration Jobs track external migration metadata, run history, and target validation results.
 - Outbound APIs expose model data through controlled endpoints.
 - API keys allow external systems to access approved models and directions.
 - Transaction logs provide traceability for inbound and outbound activity.
@@ -76,6 +78,7 @@ This creates a controlled data service layer between source systems and consumin
 - Type B Linked Data Model backend
 - Type B Mapping UI
 - Type B outbound API
+- Migration Job Registry for ora2pg/external bulk-load tracking
 - Data Browser
 - Transaction Monitor
 - Admin UI consolidation
@@ -115,6 +118,7 @@ Type B models represent governed views over existing PostgreSQL staging tables o
 - `mdp_data`: generated Type A data tables.
 - `mdp_staging`: mock migrated ERP/JDE staging tables and curated views.
 - Metadata/system tables: `users`, `data_models`, `api_keys`, `connections`, `transactions`, and related platform tables.
+- Migration registry tables: `migration_jobs`, `migration_runs`, and `migration_validations`.
 
 ## 10. Mock JDE Procurement Data
 
@@ -156,6 +160,8 @@ The MVP includes mock procurement staging data that simulates migrated Oracle JD
 - `GET /outbound/{model_name}/{key}`
 - `/db-browser`
 - `/transactions`
+- `/migration-jobs`
+- `/migration-runs`
 - `/admin/demo/seed-procurement-staging`
 
 ## 13. Security Design
@@ -172,6 +178,9 @@ The MVP includes mock procurement staging data that simulates migrated Oracle JD
 ## 14. Important Architecture Decisions
 
 - Use Type B models with staging tables/views instead of querying ERP directly.
+- Use ora2pg or another external bulk loader for large JDE/Oracle initial loads into PostgreSQL staging.
+- Do not run 30M+ row full-load migrations inside FastAPI request handlers or Python ORM loops.
+- MDP tracks migration jobs, records external run results, validates target staging tables, and then exposes data through Type B models.
 - Use PostgreSQL views for multi-table curated objects such as `purchase_order_summary`.
 - Do not implement a multi-table Type B join engine in the MVP.
 - Keep IIoT and time-series storage out of this Manufacturing Data Platform MVP.
@@ -229,11 +238,12 @@ Direction:
 7. Validate Caddy `/api` routing and HTTPS.
 8. Validate PostgreSQL backup/restore on the target server.
 9. Add release/version tagging.
-10. Later: Oracle JDE connector and sync jobs.
+10. Later: Oracle JDE source browsing, ora2pg worker orchestration, and sync jobs.
 
 ## 18. Deferred Future Phases
 
-- Oracle JDE real connector
+- Oracle JDE source browser
+- ora2pg worker container or external migration runner orchestration
 - Sync job scheduler
 - SQL Server connector production flow
 - MQTT/IIoT ingestion

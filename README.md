@@ -1,6 +1,6 @@
 # Avenue Manufacturing Data Platform
 
-Avenue Manufacturing Data Platform (Avenue MDP) is a Dockerized monorepo MVP foundation for configurable manufacturing data services. The current milestone includes FastAPI, Next.js, PostgreSQL 16, SQLAlchemy, Alembic, Docker Compose, pgAdmin, JWT authentication, user management, data model metadata CRUD, generated Type A storage tables, dynamic inbound/outbound APIs, transaction logging, API key authentication for external systems, and external connection metadata management.
+Avenue Manufacturing Data Platform (Avenue MDP) is a Dockerized monorepo MVP foundation for configurable manufacturing data services. The current milestone includes FastAPI, Next.js, PostgreSQL 16, SQLAlchemy, Alembic, Docker Compose, pgAdmin, JWT authentication, user management, data model metadata CRUD, generated Type A storage tables, dynamic inbound/outbound APIs, transaction logging, API key authentication for external systems, external connection metadata management, and migration job tracking for external bulk loaders such as ora2pg.
 
 ## Architecture Summary
 
@@ -116,6 +116,7 @@ The Avenue MDP Admin Web UI at `http://localhost:3000` is the main MVP demo work
 - API Keys
 - Transactions
 - Connections
+- Migration Jobs
 - Demo Data
 - Users
 
@@ -130,7 +131,8 @@ Recommended demo flow:
 5. Open `Data Browser` and query saved models through `/outbound/{model_name}`.
 6. Open `API Keys` and create a scoped key for selected models and directions.
 7. Test outbound access with the API key.
-8. Open `Transactions` to review JWT/API-key activity and failures.
+8. Open `Migration Jobs` to register an external ora2pg load and validate the PostgreSQL staging target.
+9. Open `Transactions` to review JWT/API-key activity and failures.
 
 The UI uses selectors for system-backed choices such as model type, schemas, tables/views, columns, data types, API key scope, directions, transaction filters, and connection types so demo users do not need to type internal identifiers manually.
 
@@ -571,11 +573,49 @@ Example Oracle JDE connection metadata:
 
 Current limitations:
 
-- Connection records are metadata only until sync jobs and mapping features are added.
-- Oracle tests require the Oracle Python driver and client/network configuration.
+- Connection records are metadata only until source browser, sync jobs, and migration worker features are added.
+- Oracle tests use `python-oracledb` thin mode and require client network access to the Oracle listener.
 - SQL Server tests require `pyodbc` and a compatible ODBC driver.
 - MQTT testing currently validates metadata only.
-- Connection records are not used for migration or sync jobs yet.
+- Large Oracle JDE bulk migrations should use ora2pg or another external loader, then be tracked through Migration Jobs.
+
+## Migration Jobs
+
+Migration Jobs track external bulk migration work such as ora2pg full loads from Oracle JDE to PostgreSQL staging.
+
+Important rule:
+
+```text
+MDP does not replace ora2pg for 30M+ row initial loads.
+```
+
+Use ora2pg or another external bulk loader for high-volume full loads. Avenue MDP stores the job metadata, records run results, validates target staging tables, and then exposes the migrated data through Type B Linked Data Models and governed outbound APIs.
+
+Authenticated APIs:
+
+```text
+POST /migration-jobs
+GET /migration-jobs
+GET /migration-jobs/{id}
+PUT /migration-jobs/{id}
+DELETE /migration-jobs/{id}
+POST /migration-jobs/{id}/runs
+GET /migration-jobs/{id}/runs
+GET /migration-runs/{id}
+PUT /migration-runs/{id}
+POST /migration-runs/{id}/validate-target
+```
+
+Target validation checks only PostgreSQL staging targets:
+
+- target schema/table existence
+- target row count
+- configured primary key columns
+- primary key null counts
+- duplicate key counts
+- first 10 sample rows
+
+Source row counts should be entered from ora2pg or external loader logs. See [docs/migration-jobs.md](docs/migration-jobs.md).
 
 ## Mock JDE Procurement Staging Data
 

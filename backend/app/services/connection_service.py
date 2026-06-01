@@ -199,18 +199,102 @@ def _test_oracle(connection: Connection) -> str:
     try:
         import oracledb  # type: ignore[import-not-found]
     except Exception as exc:
-        raise ConnectionTestError("Oracle driver is not available or not configured") from exc
+        raise ConnectionTestError(
+            "Oracle driver is not available or not configured. Install python-oracledb/oracledb."
+        ) from exc
 
     password = decrypt_password(connection.encrypted_password)
-    dsn = oracledb.makedsn(connection.host, connection.port, service_name=connection.database_name)
+    dsn = build_oracle_dsn(connection, oracledb)
+    if not connection.username:
+        raise ConnectionTestError("Oracle connection requires username")
+    if not password:
+        raise ConnectionTestError("Oracle connection requires password")
     try:
         with oracledb.connect(user=connection.username, password=password, dsn=dsn) as conn:
             with conn.cursor() as cursor:
                 cursor.execute("SELECT 1 FROM DUAL")
                 cursor.fetchone()
     except Exception as exc:
-        raise ConnectionTestError(f"Oracle connection failed: {exc}") from exc
+        raise ConnectionTestError(f"Oracle connection failed: {_oracle_error_message(exc)}") from exc
     return "Oracle connection test succeeded"
+
+
+def _oracle_config(connection: Connection) -> dict[str, Any]:
+    return connection.config if isinstance(connection.config, dict) else {}
+
+
+def _oracle_mode(connection: Connection) -> str:
+    mode = str(_oracle_config(connection).get("oracle_connect_mode") or "service_name").lower()
+    if mode not in {"service_name", "sid", "dsn"}:
+        raise ConnectionTestError(
+            "Oracle config oracle_connect_mode must be one of: service_name, sid, dsn"
+        )
+    return mode
+
+
+def _required_oracle_host_fields(connection: Connection) -> None:
+    missing = [
+        field
+        for field in ("host", "port")
+        if getattr(connection, field) in (None, "")
+    ]
+    if missing:
+        raise ConnectionTestError(f"Oracle connection requires: {', '.join(missing)}")
+
+
+def build_oracle_dsn(connection: Connection, oracledb_module: Any) -> str:
+    """Build an Oracle DSN for python-oracledb thin mode."""
+    config = _oracle_config(connection)
+    mode = _oracle_mode(connection)
+
+    if mode == "dsn":
+        dsn = config.get("dsn")
+        if not dsn:
+            raise ConnectionTestError("Oracle config dsn is required when oracle_connect_mode is dsn")
+        return str(dsn)
+
+    _required_oracle_host_fields(connection)
+
+    if mode == "sid":
+        sid = config.get("sid") or connection.database_name
+        if not sid:
+            raise ConnectionTestError(
+                "Oracle sid is required when oracle_connect_mode is sid"
+            )
+        return str(oracledb_module.makedsn(connection.host, connection.port, sid=sid))
+
+    service_name = config.get("service_name") or connection.database_name
+    if not service_name:
+        raise ConnectionTestError(
+            "Oracle service_name is required when oracle_connect_mode is service_name"
+        )
+    return str(
+        oracledb_module.makedsn(
+            connection.host,
+            connection.port,
+            service_name=service_name,
+        )
+    )
+
+
+def _oracle_error_message(exc: Exception) -> str:
+    raw = str(exc).strip() or exc.__class__.__name__
+    lowered = raw.lower()
+    if "ora-01017" in lowered or "invalid username/password" in lowered:
+        return f"authentication failed: {raw}"
+    if "ora-12514" in lowered or "listener does not currently know" in lowered:
+        return f"service name was not found by the Oracle listener: {raw}"
+    if "ora-12505" in lowered:
+        return f"SID was not found by the Oracle listener: {raw}"
+    if (
+        "connection refused" in lowered
+        or "ora-12541" in lowered
+        or "dpypy-6005" in lowered
+    ):
+        return f"connection refused or listener unavailable: {raw}"
+    if "timed out" in lowered or "timeout" in lowered:
+        return f"connection timed out: {raw}"
+    return raw
 
 
 def _test_sqlserver(connection: Connection) -> str:
