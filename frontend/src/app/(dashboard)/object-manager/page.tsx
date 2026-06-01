@@ -876,7 +876,7 @@ export default function DataModelsPage() {
         open={mode !== null && mode !== "preview"}
         onClose={() => setMode(null)}
         title={modalTitle}
-        className="max-h-[92vh] max-w-6xl overflow-hidden"
+        className="data-model-dialog overflow-hidden"
         footer={
           mode === "view" ? (
             <>
@@ -899,7 +899,7 @@ export default function DataModelsPage() {
           )
         }
       >
-        <div className="max-h-[70vh] overflow-y-auto pr-1">
+        <div className="pr-1">
           {detailLoading && <p className="text-sm text-neutral-500">Loading data model...</p>}
           {mode === "view" && selected && renderView(selected)}
           {(mode === "create" || mode === "edit") && renderEditor()}
@@ -910,7 +910,7 @@ export default function DataModelsPage() {
         open={mode === "preview"}
         onClose={() => setMode(null)}
         title="Preview Data Model"
-        className="max-h-[92vh] max-w-6xl overflow-hidden"
+        className="data-model-dialog overflow-hidden"
         footer={
           <>
             <Button variant="ghost" onClick={() => setMode(null)}>Close</Button>
@@ -918,7 +918,7 @@ export default function DataModelsPage() {
           </>
         }
       >
-        <div className="max-h-[70vh] overflow-y-auto pr-1">
+        <div className="pr-1">
           {previewLoading && <p className="text-sm text-neutral-500">Loading preview...</p>}
           {selected && renderPreview(selected, preview)}
         </div>
@@ -1154,11 +1154,11 @@ export default function DataModelsPage() {
           <col className="w-[170px]" />
           <col className="w-[190px]" />
           <col className="w-[130px]" />
-          {typeB && <col className="w-[220px]" />}
+          {typeB && <col className="w-[260px]" />}
           <col className="w-[80px]" />
           <col className="w-[80px]" />
-          <col className="w-[200px]" />
-          <col className="w-[70px]" />
+          {!typeB && <col className="w-[220px]" />}
+          <col className="w-[82px]" />
         </colgroup>
         <THead>
           <TR>
@@ -1168,7 +1168,7 @@ export default function DataModelsPage() {
             {typeB && <TH>Source Column</TH>}
             <TH className="text-center">Required</TH>
             <TH className="text-center">Primary</TH>
-            <TH>Description</TH>
+            {!typeB && <TH>Description</TH>}
             <TH className="text-center">Actions</TH>
           </TR>
         </THead>
@@ -1241,14 +1241,16 @@ export default function DataModelsPage() {
                   onChange={() => setPrimaryAttribute(index)}
                 />
               </TD>
-              <TD>
-                <Input
-                  aria-label="Description"
-                  value={attribute.description || ""}
-                  onChange={(event) => updateAttribute(index, { description: event.target.value })}
-                  className="h-8 text-xs"
-                />
-              </TD>
+              {!typeB && (
+                <TD>
+                  <Input
+                    aria-label="Description"
+                    value={attribute.description || ""}
+                    onChange={(event) => updateAttribute(index, { description: event.target.value })}
+                    className="h-8 text-xs"
+                  />
+                </TD>
+              )}
               <TD className="text-center">
                 <button
                   type="button"

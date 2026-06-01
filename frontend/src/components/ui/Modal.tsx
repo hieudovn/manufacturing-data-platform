@@ -65,12 +65,12 @@ export function Modal({
         ref={panelRef}
         tabIndex={-1}
         className={cn(
-          "relative z-10 w-full max-w-lg rounded-lg bg-white shadow-xl outline-none",
+          "relative z-10 flex max-h-[92vh] w-full max-w-lg flex-col rounded-lg bg-white shadow-xl outline-none",
           className,
         )}
       >
         {title && (
-          <div className="flex items-center justify-between border-b border-neutral-100 px-5 py-3.5">
+          <div className="flex shrink-0 items-center justify-between border-b border-neutral-100 px-5 py-3.5">
             <h3 id={titleId} className="text-base font-semibold text-neutral-900">
               {title}
             </h3>
@@ -83,9 +83,9 @@ export function Modal({
             </button>
           </div>
         )}
-        <div className="px-5 py-4">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
         {footer && (
-          <div className="flex justify-end gap-2 border-t border-neutral-100 px-5 py-3.5">
+          <div className="flex shrink-0 justify-end gap-2 border-t border-neutral-100 px-5 py-3.5">
             {footer}
           </div>
         )}
