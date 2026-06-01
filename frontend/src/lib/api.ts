@@ -169,7 +169,10 @@ export type DataModelAttribute = {
   display_name?: string | null;
   data_type: AttrType;
   required?: boolean;
+  description?: string | null;
+  sensitivity?: string | null;
   is_primary_key?: boolean;
+  source_path?: string | null;
   // Type B mapping (one source table per model):
   source_schema?: string | null;
   source_table?: string | null;
@@ -181,9 +184,22 @@ export type DataModel = {
   name: string;
   display_name: string | null;
   type: "A" | "B";
+  category?: string | null;
+  namespace?: string | null;
+  entity_type?: string | null;
+  business_process?: string | null;
+  source_layer?: string | null;
+  canonical_status?: string | null;
+  site_scope?: string | null;
   description?: string | null;
+  business_definition?: string | null;
+  owner_department?: string | null;
+  source_system?: string | null;
   domain?: string | null;
   primary_key?: string | null;
+  sensitivity_level?: string | null;
+  ai_enabled?: boolean;
+  refresh_policy?: string | null;
   generated_table?: string | null;
   attributes: DataModelAttribute[];
   source_schema?: string | null; // computed (Type B)
@@ -198,8 +214,22 @@ export type DataModelCreate = {
   display_name?: string;
   type: "A" | "B";
   category?: string | null;
+  namespace?: string | null;
+  domain?: string | null;
+  entity_type?: string | null;
+  business_process?: string | null;
+  source_layer?: string | null;
+  canonical_status?: string | null;
+  site_scope?: string | null;
   description?: string | null;
-  primary_key: string;
+  business_definition?: string | null;
+  owner_department?: string | null;
+  source_system?: string | null;
+  primary_key?: string | null;
+  refresh_policy?: string | null;
+  sensitivity_level?: string | null;
+  ai_enabled?: boolean;
+  status?: string | null;
   attributes: DataModelAttribute[];
 };
 
@@ -212,6 +242,47 @@ export const updateDataModel = (id: string, body: Partial<DataModelCreate>) =>
 /** Soft-deactivate (status=inactive); returns the model. */
 export const deleteDataModel = (id: string) =>
   req<DataModel>(`/data-models/${id}`, { method: "DELETE" });
+
+export type ValidationMessage = { field: string; message: string };
+export type TypeBValidationResult = {
+  status: string;
+  message: string;
+  warnings?: ValidationMessage[];
+  source_schema?: string;
+  source_table?: string;
+  mapped_columns?: Array<{
+    attribute: string;
+    source_column: string;
+    source_data_type: string;
+    model_data_type: string;
+  }>;
+};
+export type ModelPreview = {
+  status?: string;
+  model?: string;
+  type?: "A" | "B";
+  source_schema?: string;
+  source_table?: string;
+  warnings?: ValidationMessage[];
+  count?: number;
+  limit?: number;
+  offset?: number;
+  data?: Record<string, unknown>[];
+  records?: Record<string, unknown>[];
+};
+
+export const validateTypeBMapping = (body: DataModelCreate) =>
+  req<TypeBValidationResult>("/data-models/type-b/validate-mapping", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+export const previewTypeBMapping = (body: DataModelCreate, limit = 20) =>
+  req<ModelPreview>(`/data-models/type-b/preview?limit=${limit}`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+export const previewSavedTypeBModel = (id: string, limit = 20) =>
+  req<ModelPreview>(`/data-models/${id}/mapped-preview?limit=${limit}`);
 
 // DB Browser
 export type DbTable = { table_name: string; table_type: string };
@@ -390,10 +461,14 @@ export const outbound = (model: string, params: { limit?: number; include_meta?:
   const q = new URLSearchParams();
   q.set("limit", String(params.limit ?? 50));
   if (params.include_meta) q.set("include_meta", "true");
-  return req<{ model?: string; count?: number; records?: Record<string, unknown>[] } & Record<string, unknown>>(
+  return req<ModelPreview>(
     `/outbound/${encodeURIComponent(model)}?${q.toString()}`,
   );
 };
+export const outboundByKey = (model: string, key: string) =>
+  req<{ status?: string; model?: string; type?: "A" | "B"; key?: string; data?: Record<string, unknown> }>(
+    `/outbound/${encodeURIComponent(model)}/${encodeURIComponent(key)}`,
+  );
 
 // Admin demo
 export const procurementStagingSummary = () =>
