@@ -237,3 +237,43 @@ class DataModelRead(DataModelBase):
             if attribute.source_table is not None
         }
         return values.pop() if len(values) == 1 else None
+
+
+class DataModelTemplateRead(BaseModel):
+    template_key: str
+    display_name: str
+    description: str
+    category: str
+    domain: DomainValue
+    entity_type: str
+    business_process: BusinessProcessValue
+    source_system: str
+    source_layer: SourceLayerValue
+    canonical_status: CanonicalStatusValue
+    site_scope: SiteScopeValue
+    model_name: str
+    model_display_name: str
+    model_type: Literal["B"] = "B"
+    primary_key: str
+    source_schema: str
+    source_table: str
+    attributes: list[DataModelAttribute]
+    related_migration_template_key: str | None = None
+    related_migration_target_table: str | None = None
+    config: dict[str, Any] | None = None
+
+
+class DataModelTemplateCreateModelRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=150)
+    display_name: str | None = Field(default=None, min_length=1, max_length=255)
+    source_schema: str | None = Field(default=None, max_length=150)
+    source_table: str | None = Field(default=None, max_length=150)
+    status: str | None = Field(default=None, max_length=50)
+    overrides: dict[str, Any] | None = None
+    config: dict[str, Any] | None = None
+
+
+class DataModelTemplateCreateModelResponse(BaseModel):
+    status: str
+    data_model: DataModelRead
+    warnings: list[dict[str, str]] = []

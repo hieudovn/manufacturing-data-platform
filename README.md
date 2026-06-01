@@ -1,6 +1,6 @@
 # Avenue Manufacturing Data Platform
 
-Avenue Manufacturing Data Platform (Avenue MDP) is a Dockerized monorepo MVP foundation for configurable manufacturing data services. The current milestone includes FastAPI, Next.js, PostgreSQL 16, SQLAlchemy, Alembic, Docker Compose, pgAdmin, JWT authentication, user management, data model metadata CRUD, generated Type A storage tables, dynamic inbound/outbound APIs, transaction logging, API key authentication for external systems, external connection metadata management, migration job tracking for external bulk loaders such as ora2pg, and JDE procurement migration templates.
+Avenue Manufacturing Data Platform (Avenue MDP) is a Dockerized monorepo MVP foundation for configurable manufacturing data services. The current milestone includes FastAPI, Next.js, PostgreSQL 16, SQLAlchemy, Alembic, Docker Compose, pgAdmin, JWT authentication, user management, data model metadata CRUD, generated Type A storage tables, dynamic inbound/outbound APIs, transaction logging, API key authentication for external systems, external connection metadata management, migration job tracking for external bulk loaders such as ora2pg, JDE procurement migration templates, and JDE Type B data model templates.
 
 ## Architecture Summary
 
@@ -16,6 +16,8 @@ Authentication is implemented with bcrypt password hashing and JWT bearer tokens
 For a concise project context snapshot covering product vision, architecture, completed capabilities, design decisions, and roadmap, see [docs/project-context.md](docs/project-context.md).
 
 For the external ora2pg migration tracking strategy, see [docs/migration-jobs.md](docs/migration-jobs.md).
+
+For JDE Type B model templates, see [docs/data-model-templates.md](docs/data-model-templates.md).
 
 ## Local Setup
 
@@ -624,6 +626,20 @@ Target validation checks only PostgreSQL staging targets:
 Source row counts should be entered from ora2pg or external loader logs. See [docs/migration-jobs.md](docs/migration-jobs.md).
 
 The JDE Procurement templates provide starting points for Supplier Master, Purchase Order Header, Purchase Order Line, Purchase Order Receipt, AP Invoice, and the curated Purchase Order Summary View. They pre-fill source/target metadata, primary key columns, watermark fields, and validation level; customer-specific JDE schemas should still be reviewed with the DBA/JDE team.
+
+## Data Model Templates
+
+Data Model Templates create governed Type B models from migrated JDE staging tables and curated views after migration data has landed in PostgreSQL. They reuse the existing Type B mapping validation and do not create physical tables or run migration workloads.
+
+Authenticated APIs:
+
+```text
+GET /data-model-templates
+GET /data-model-templates/{template_key}
+POST /data-model-templates/{template_key}/create-model
+```
+
+Current JDE Procurement templates include `jde_supplier`, `jde_purchase_order_summary`, `jde_ap_invoice`, `jde_po_header`, and `jde_po_line`. Detailed guidance is in [docs/data-model-templates.md](docs/data-model-templates.md).
 
 ## Mock JDE Procurement Staging Data
 

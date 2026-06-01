@@ -209,6 +209,36 @@ export type DataModel = {
   updated_at: string;
 };
 
+export type DataModelTemplate = {
+  template_key: string;
+  display_name: string;
+  description: string;
+  category: string;
+  domain: string;
+  entity_type: string;
+  business_process: string;
+  source_system: string;
+  source_layer: string;
+  canonical_status: string;
+  site_scope: string;
+  model_name: string;
+  model_display_name: string;
+  model_type: "B";
+  primary_key: string;
+  source_schema: string;
+  source_table: string;
+  attributes: DataModelAttribute[];
+  related_migration_template_key?: string | null;
+  related_migration_target_table?: string | null;
+  config?: Record<string, unknown> | null;
+};
+
+export type DataModelTemplateCreateResponse = {
+  status: string;
+  data_model: DataModel;
+  warnings: ValidationMessage[];
+};
+
 export type DataModelCreate = {
   name: string;
   display_name?: string;
@@ -242,6 +272,15 @@ export const updateDataModel = (id: string, body: Partial<DataModelCreate>) =>
 /** Soft-deactivate (status=inactive); returns the model. */
 export const deleteDataModel = (id: string) =>
   req<DataModel>(`/data-models/${id}`, { method: "DELETE" });
+export const listDataModelTemplates = () =>
+  req<DataModelTemplate[]>("/data-model-templates");
+export const getDataModelTemplate = (templateKey: string) =>
+  req<DataModelTemplate>(`/data-model-templates/${encodeURIComponent(templateKey)}`);
+export const createDataModelFromTemplate = (templateKey: string, body: Record<string, unknown>) =>
+  req<DataModelTemplateCreateResponse>(
+    `/data-model-templates/${encodeURIComponent(templateKey)}/create-model`,
+    { method: "POST", body: JSON.stringify(body) },
+  );
 
 export type ValidationMessage = { field: string; message: string };
 export type TypeBValidationResult = {

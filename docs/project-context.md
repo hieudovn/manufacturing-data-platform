@@ -84,6 +84,7 @@ This creates a controlled data service layer between source systems and consumin
 - PostgreSQL target staging validation
 - Migration scope, row-limit, time-window, and watermark metadata foundation
 - JDE Procurement Migration Templates
+- JDE Type B Data Model Templates
 - Data Browser
 - Transaction Monitor
 - Admin UI consolidation
@@ -168,6 +169,7 @@ The MVP includes mock procurement staging data that simulates migrated Oracle JD
 - `/migration-jobs`
 - `/migration-runs`
 - `/migration-templates`
+- `/data-model-templates`
 - `/admin/demo/seed-procurement-staging`
 
 ## 13. Security Design
@@ -191,6 +193,7 @@ The MVP includes mock procurement staging data that simulates migrated Oracle JD
 - Migration jobs store the last successful watermark to support future incremental updates.
 - Data integrity validation starts with target-side checks and can be expanded to source-target reconciliation later.
 - JDE Procurement Migration Templates provide consistent starting points for common JDE procurement staging jobs.
+- JDE Type B Data Model Templates create governed models from validated JDE staging tables/views.
 - Use PostgreSQL views for multi-table curated objects such as `purchase_order_summary`.
 - Do not implement a multi-table Type B join engine in the MVP.
 - Keep IIoT and time-series storage out of this Manufacturing Data Platform MVP.
@@ -239,7 +242,7 @@ Direction:
 
 ## 17. Current Recommended Next Steps
 
-1. Harden Migration Jobs templates if needed for customer-specific JDE schemas.
+1. Harden Migration and Data Model templates for customer-specific JDE schemas if needed.
 2. Run UAT with real ora2pg migrated JDE staging data.
 3. Create Type B models from real JDE staging.
 4. Cloud deployment.

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Eye, Pencil, Power, RotateCcw, TableProperties } from "lucide-react";
+import { ClipboardList, Eye, Pencil, Power, RotateCcw, TableProperties } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardBody, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -14,9 +14,11 @@ import {
   ApiError,
   apiPath,
   ATTR_TYPES,
+  createDataModelFromTemplate,
   createDataModel,
   deleteDataModel,
   getDataModel,
+  listDataModelTemplates,
   listColumns,
   listDataModels,
   listSchemas,
@@ -31,6 +33,7 @@ import {
   type DataModel,
   type DataModelAttribute,
   type DataModelCreate,
+  type DataModelTemplate,
   type DbColumn,
   type DbTable,
   type ModelPreview,
@@ -109,6 +112,15 @@ type FormState = {
   attributes: DataModelAttribute[];
 };
 
+type TemplateForm = {
+  name: string;
+  display_name: string;
+  source_schema: string;
+  source_table: string;
+  status: string;
+  config_json: string;
+};
+
 function snake(value: string): string {
   return value
     .trim()
@@ -161,6 +173,17 @@ function initialForm(): FormState {
         is_primary_key: true,
       },
     ],
+  };
+}
+
+function emptyTemplateForm(template?: DataModelTemplate | null): TemplateForm {
+  return {
+    name: template?.model_name || "",
+    display_name: template?.model_display_name || "",
+    source_schema: template?.source_schema || "mdp_staging",
+    source_table: template?.source_table || "",
+    status: "active",
+    config_json: "",
   };
 }
 
@@ -321,6 +344,11 @@ export default function DataModelsPage() {
   const [preview, setPreview] = useState<ModelPreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [confirm, setConfirm] = useState<DataModel | null>(null);
+  const [templateOpen, setTemplateOpen] = useState(false);
+  const [templates, setTemplates] = useState<DataModelTemplate[]>([]);
+  const [selectedTemplateKey, setSelectedTemplateKey] = useState("");
+  const [templateForm, setTemplateForm] = useState<TemplateForm>(emptyTemplateForm());
+  const [templateLoading, setTemplateLoading] = useState(false);
 
   const [schemas, setSchemas] = useState<string[]>([]);
   const [sourceSchema, setSourceSchema] = useState("");
@@ -334,6 +362,8 @@ export default function DataModelsPage() {
   const [canonicalFilter, setCanonicalFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("active");
   const [search, setSearch] = useState("");
+
+  const selectedTemplate = templates.find((template) => template.template_key === selectedTemplateKey) || null;
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -408,6 +438,10 @@ export default function DataModelsPage() {
 
   function patchForm(patch: Partial<FormState>) {
     setForm((current) => ({ ...current, ...patch }));
+  }
+
+  function patchTemplateForm(patch: Partial<TemplateForm>) {
+    setTemplateForm((current) => ({ ...current, ...patch }));
   }
 
   function updateAttribute(index: number, patch: Partial<DataModelAttribute>) {
@@ -561,6 +595,65 @@ export default function DataModelsPage() {
       }
     });
     return errors;
+  }
+
+  async function openTemplateCreate() {
+    clearMessages();
+    setTemplateOpen(true);
+    setTemplateLoading(true);
+    try {
+      const loaded = await listDataModelTemplates();
+      setTemplates(loaded);
+      const first = loaded[0] || null;
+      setSelectedTemplateKey(first?.template_key || "");
+      setTemplateForm(emptyTemplateForm(first));
+    } catch (error) {
+      setFormErrors(errorMessages(error));
+    } finally {
+      setTemplateLoading(false);
+    }
+  }
+
+  function changeTemplate(templateKey: string) {
+    const template = templates.find((item) => item.template_key === templateKey) || null;
+    setSelectedTemplateKey(templateKey);
+    setTemplateForm(emptyTemplateForm(template));
+  }
+
+  async function createFromTemplate() {
+    if (!selectedTemplateKey) return;
+    setSaving(true);
+    setFormErrors([]);
+    setWarnings([]);
+    try {
+      let config: Record<string, unknown> | null = null;
+      if (templateForm.config_json.trim()) {
+        const parsed = JSON.parse(templateForm.config_json);
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+          throw new Error("Config override must be a JSON object.");
+        }
+        config = parsed as Record<string, unknown>;
+      }
+      const result = await createDataModelFromTemplate(selectedTemplateKey, {
+        name: emptyToNull(templateForm.name),
+        display_name: emptyToNull(templateForm.display_name),
+        source_schema: emptyToNull(templateForm.source_schema),
+        source_table: emptyToNull(templateForm.source_table),
+        status: templateForm.status || "active",
+        config,
+      });
+      setWarnings(result.warnings || []);
+      setNotice(`Created ${result.data_model.name} from template.`);
+      setTemplateOpen(false);
+      await reload();
+      if (result.data_model.type === "B") {
+        await openPreview(result.data_model);
+      }
+    } catch (error) {
+      setFormErrors(errorMessages(error));
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function openCreate() {
@@ -746,7 +839,15 @@ export default function DataModelsPage() {
       <PageHeader
         title="Data Models"
         subtitle={`Public API: ${apiPath("/data-models")} · Backend route: /data-models.`}
-        action={<Button onClick={openCreate}>New Data Model</Button>}
+        action={
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" onClick={openTemplateCreate}>
+              <ClipboardList size={16} />
+              Create from Template
+            </Button>
+            <Button onClick={openCreate}>New Data Model</Button>
+          </div>
+        }
       />
 
       {pageError && <p className="mb-4 rounded-md bg-danger/10 px-3 py-2 text-sm text-danger">{pageError}</p>}
@@ -873,6 +974,26 @@ export default function DataModelsPage() {
       </Card>
 
       <Modal
+        open={templateOpen}
+        onClose={() => setTemplateOpen(false)}
+        title="Create Data Model from Template"
+        className="data-model-dialog overflow-hidden"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setTemplateOpen(false)}>Cancel</Button>
+            <Button onClick={createFromTemplate} disabled={saving || templateLoading || !selectedTemplateKey}>
+              {saving ? "Creating..." : "Create Model"}
+            </Button>
+          </>
+        }
+      >
+        <div className="pr-1">
+          {renderMessages()}
+          {renderTemplateCreate()}
+        </div>
+      </Modal>
+
+      <Modal
         open={mode !== null && mode !== "preview"}
         onClose={() => setMode(null)}
         title={modalTitle}
@@ -977,6 +1098,121 @@ export default function DataModelsPage() {
           <p className="rounded-md bg-success/10 px-3 py-2 text-sm text-success">{validation.message}</p>
         )}
       </>
+    );
+  }
+
+  function renderTemplateCreate() {
+    return (
+      <div className="space-y-4">
+        <p className="rounded-md bg-info/10 px-3 py-2 text-sm text-info">
+          Type B templates turn migrated JDE staging tables or curated views into governed data models. Run or validate the related migration job first if the source object is missing.
+        </p>
+        {templateLoading ? (
+          <p className="text-sm text-neutral-500">Loading templates...</p>
+        ) : (
+          <>
+            <DrawerSection title="JDE Procurement Templates">
+              <div className="grid gap-3 md:grid-cols-[minmax(260px,360px)_1fr]">
+                <Select
+                  label="Template"
+                  value={selectedTemplateKey}
+                  onChange={(event) => changeTemplate(event.target.value)}
+                >
+                  {templates.map((template) => (
+                    <option key={template.template_key} value={template.template_key}>
+                      {template.display_name}
+                    </option>
+                  ))}
+                </Select>
+                {selectedTemplate && (
+                  <div className="rounded-md border border-neutral-100 bg-neutral-50 px-3 py-2 text-sm">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold text-neutral-900">{selectedTemplate.display_name}</span>
+                      <Badge tone="info">Type B</Badge>
+                      <Badge tone={selectedTemplate.source_layer === "curated_view" ? "neutral" : "success"}>
+                        {titleize(selectedTemplate.source_layer)}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 text-xs text-neutral-600">{selectedTemplate.description}</p>
+                  </div>
+                )}
+              </div>
+            </DrawerSection>
+            {selectedTemplate && (
+              <>
+                <DrawerSection title="Template Summary">
+                  <DetailGrid
+                    items={[
+                      ["Model Name", selectedTemplate.model_name],
+                      ["Display Name", selectedTemplate.model_display_name],
+                      ["Source", `${selectedTemplate.source_schema}.${selectedTemplate.source_table}`],
+                      ["Primary Key", selectedTemplate.primary_key],
+                      ["Domain", titleize(selectedTemplate.domain)],
+                      ["Canonical Status", titleize(selectedTemplate.canonical_status)],
+                      ["Migration Template", selectedTemplate.related_migration_template_key],
+                      ["Migration Target", selectedTemplate.related_migration_target_table],
+                    ]}
+                  />
+                </DrawerSection>
+                <DrawerSection title="Overrides">
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <Input label="Model name" value={templateForm.name} onChange={(event) => patchTemplateForm({ name: snake(event.target.value) })} />
+                    <Input label="Display name" value={templateForm.display_name} onChange={(event) => patchTemplateForm({ display_name: event.target.value })} />
+                    <Input label="Source schema" value={templateForm.source_schema} onChange={(event) => patchTemplateForm({ source_schema: event.target.value })} />
+                    <Input label="Source table / view" value={templateForm.source_table} onChange={(event) => patchTemplateForm({ source_table: event.target.value })} />
+                    <Select label="Status" value={templateForm.status} onChange={(event) => patchTemplateForm({ status: event.target.value })}>
+                      <option value="active">Active</option>
+                      <option value="inactive">Inactive</option>
+                    </Select>
+                  </div>
+                  <div className="mt-3">
+                    <label className="block">
+                      <span className="mb-1.5 block text-sm font-medium text-neutral-700">Config Override JSON</span>
+                      <textarea
+                        value={templateForm.config_json}
+                        onChange={(event) => patchTemplateForm({ config_json: event.target.value })}
+                        rows={5}
+                        className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 font-mono text-xs text-neutral-900 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30"
+                      />
+                    </label>
+                  </div>
+                </DrawerSection>
+                <DrawerSection title="Attributes" subtitle={`${selectedTemplate.attributes.length} mapped attribute(s)`}>
+                  <Table className="table-fixed text-xs">
+                    <colgroup>
+                      <col className="w-[190px]" />
+                      <col className="w-[110px]" />
+                      <col className="w-[220px]" />
+                      <col className="w-[90px]" />
+                      <col className="w-[90px]" />
+                    </colgroup>
+                    <THead>
+                      <TR>
+                        <TH>Attribute</TH>
+                        <TH>Type</TH>
+                        <TH>Source Column</TH>
+                        <TH className="text-center">Required</TH>
+                        <TH className="text-center">Primary</TH>
+                      </TR>
+                    </THead>
+                    <TBody>
+                      {selectedTemplate.attributes.map((attribute) => (
+                        <TR key={attribute.name}>
+                          <TD className="truncate font-mono text-xs" title={attribute.name}>{attribute.name}</TD>
+                          <TD>{attribute.data_type}</TD>
+                          <TD className="truncate font-mono text-xs" title={attribute.source_column || ""}>{attribute.source_column || "-"}</TD>
+                          <TD className="text-center">{attribute.required ? "Yes" : "No"}</TD>
+                          <TD className="text-center">{attribute.is_primary_key ? "Yes" : "No"}</TD>
+                        </TR>
+                      ))}
+                    </TBody>
+                  </Table>
+                </DrawerSection>
+              </>
+            )}
+          </>
+        )}
+      </div>
     );
   }
 
