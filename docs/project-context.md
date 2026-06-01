@@ -207,6 +207,7 @@ Direction:
 - Frontend is a Next.js App Router application migrated from the `Hieu123k/MDP-ver1.0` variant repository
 - Local frontend builds use `NEXT_PUBLIC_API_URL=http://localhost:8000`
 - Production frontend builds leave `NEXT_PUBLIC_API_URL` empty and call same-origin `/api/*` through Caddy
+- Frontend code should pass canonical backend paths such as `/data-models` into `frontend/src/lib/api.ts`; the helper adds `/api` only for the public proxy route
 - Dark sidebar with light content area
 - Avenue red accent color
 - Use Inter or IBM Plex Sans

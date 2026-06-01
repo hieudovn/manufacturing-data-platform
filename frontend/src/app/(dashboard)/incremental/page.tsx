@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/Table";
 import {
   ApiError,
+  apiPath,
   listSchemas,
   listTables,
   previewTable,
@@ -68,7 +69,7 @@ export default function DbBrowserPage() {
 
   return (
     <>
-      <PageHeader title="DB Browser" subtitle="Read-only schema / table preview (MDP /db-browser)." />
+      <PageHeader title="DB Browser" subtitle={`Public API: ${apiPath("/db-browser/schemas")} · Backend route: /db-browser.`} />
       {err && <p className="mb-4 rounded-md bg-danger/10 px-3 py-2 text-sm text-danger">{err}</p>}
       <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
         <Card>
@@ -82,7 +83,7 @@ export default function DbBrowserPage() {
               ))}
             </Select>
             <div className="max-h-[60vh] space-y-1 overflow-y-auto">
-              {loadingTables && <p className="text-sm text-neutral-400">Loading…</p>}
+              {loadingTables && <p className="text-sm text-neutral-400">Loading...</p>}
               {!loadingTables && tables.length === 0 && (
                 <p className="text-sm text-neutral-400">No tables.</p>
               )}
@@ -111,7 +112,7 @@ export default function DbBrowserPage() {
           />
           <CardBody>
             {!selectedTable && <p className="text-sm text-neutral-400">Pick a table to preview rows.</p>}
-            {loadingPreview && <p className="text-sm text-neutral-400">Loading preview…</p>}
+            {loadingPreview && <p className="text-sm text-neutral-400">Loading preview...</p>}
             {preview && preview.rows.length === 0 && (
               <p className="text-sm text-neutral-400">(no rows)</p>
             )}

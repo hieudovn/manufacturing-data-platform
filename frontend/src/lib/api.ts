@@ -7,17 +7,25 @@
  * Production leaves NEXT_PUBLIC_API_URL empty so the browser calls same-origin
  * /api/* routes. Caddy strips /api before forwarding to the backend.
  */
-const RAW = process.env.NEXT_PUBLIC_API_URL;
-export const API_BASE =
-  RAW === undefined || RAW === "undefined" ? "" : RAW.trim().replace(/\/$/, "");
-const API_PREFIX = API_BASE ? "" : "/api";
+const configuredBase = process.env.NEXT_PUBLIC_API_URL?.trim();
+export const API_BASE_URL =
+  configuredBase && configuredBase !== "undefined"
+    ? configuredBase.replace(/\/+$/, "")
+    : "/api";
 
-export function apiUrl(path: string): string {
-  const p = path.startsWith("/") ? path : `/${path}`;
-  return `${API_BASE}${API_PREFIX}${p}`;
+function canonicalBackendPath(path: string): string {
+  const withSlash = path.startsWith("/") ? path : `/${path}`;
+  if (withSlash === "/api") return "/";
+  if (withSlash.startsWith("/api/")) return withSlash.slice(4);
+  return withSlash;
 }
 
-// ── Token storage ──────────────────────────────────────────────────
+export function apiPath(path: string): string {
+  const backendPath = canonicalBackendPath(path);
+  return `${API_BASE_URL}${backendPath}`;
+}
+
+// Token storage
 const TOKEN_KEY = "mdp_token";
 export function getToken(): string | null {
   if (typeof window === "undefined") return null;
@@ -75,20 +83,7 @@ function messageFromBody(data: unknown, fallback: string): string {
 }
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = getToken();
-  let res: Response;
-  try {
-    res = await fetch(apiUrl(path), {
-      ...init,
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...(init?.headers || {}),
-      },
-    });
-  } catch {
-    throw new ApiError(0, `Cannot reach backend (${API_BASE || "same-origin"}).`);
-  }
+  const res = await apiFetch(path, init);
   const text = await res.text();
   let data: unknown = null;
   try {
@@ -106,7 +101,23 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
-// ── Auth ───────────────────────────────────────────────────────────
+export async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
+  const token = getToken();
+  try {
+    return await fetch(apiPath(path), {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(init?.headers || {}),
+      },
+    });
+  } catch {
+    throw new ApiError(0, `Cannot reach backend (${API_BASE_URL}).`);
+  }
+}
+
+// Auth
 export type AuthUser = {
   id: string;
   username: string;
@@ -129,12 +140,12 @@ export async function authLogin(username: string, password: string): Promise<voi
 
 export const authMe = () => req<AuthUser>("/auth/me");
 
-/** MDP has no logout endpoint (stateless JWT) → just drop the token. */
+/** MDP has no logout endpoint (stateless JWT) -> just drop the token. */
 export function authLogout(): void {
   clearToken();
 }
 
-// ── Data Models (Type A = generated table · Type B = mapping over source) ──
+// Data Models
 export type AttrType =
   | "text"
   | "integer"
@@ -202,7 +213,7 @@ export const updateDataModel = (id: string, body: Partial<DataModelCreate>) =>
 export const deleteDataModel = (id: string) =>
   req<DataModel>(`/data-models/${id}`, { method: "DELETE" });
 
-// ── DB Browser (read-only metadata + row preview) ──────────────────
+// DB Browser
 export type DbTable = { table_name: string; table_type: string };
 export type DbColumn = {
   column_name: string;
@@ -235,7 +246,7 @@ export const previewTable = (schema: string, table: string, limit = 50) =>
     `/db-browser/schemas/${encodeURIComponent(schema)}/tables/${encodeURIComponent(table)}/preview?limit=${limit}`,
   );
 
-/** Map a raw Postgres data_type → one of the 7 platform types (mirrors backend). */
+/** Map a raw Postgres data_type -> one of the 7 platform types (mirrors backend). */
 export function normalizePgType(raw: string): AttrType {
   const t = (raw || "").toLowerCase().split("(")[0].trim();
   if (["text", "character varying", "varchar", "char", "character", "name", "citext"].includes(t))
@@ -251,7 +262,7 @@ export function normalizePgType(raw: string): AttrType {
   return "text";
 }
 
-// ── Users ──────────────────────────────────────────────────────────
+// Users
 export type User = {
   id: string;
   username: string;
@@ -280,7 +291,7 @@ export const updateUser = (
 export const deleteUser = (id: string) =>
   req<void>(`/users/${id}`, { method: "DELETE" });
 
-// ── API Keys (X-API-Key for external systems; plaintext shown once) ──
+// API Keys
 export const API_DIRECTIONS = ["inbound", "outbound"] as const;
 export type ApiKey = {
   id: string;
@@ -313,7 +324,7 @@ export const updateApiKey = (
 export const deleteApiKey = (id: string) =>
   req<ApiKey>(`/api-keys/${id}`, { method: "DELETE" });
 
-// ── Connections (external systems; password write-only, Fernet on backend) ──
+// Connections
 export const CONNECTION_TYPES = ["postgresql", "oracle", "sqlserver", "rest_api", "mqtt"] as const;
 export type ConnType = (typeof CONNECTION_TYPES)[number];
 export type Connection = {
@@ -345,7 +356,7 @@ export const deleteConnection = (id: string) =>
 export const testConnection = (id: string) =>
   req<ConnectionTestResult>(`/connections/${id}/test`, { method: "POST" });
 
-// ── Transactions (ingest/outbound audit log) ───────────────────────
+// Transactions
 export type Transaction = {
   id: string;
   direction: string;
@@ -368,7 +379,7 @@ export const listTransactions = (
   return req<Transaction[]>(`/transactions?${q.toString()}`);
 };
 
-// ── Inbound / Outbound (Type A data flow) ──────────────────────────
+// Inbound / Outbound
 export type InboundResult = { status: string; model: string; record_id: string; message: string };
 export const inbound = (model: string, payload: Record<string, unknown>) =>
   req<InboundResult>(`/inbound/${encodeURIComponent(model)}`, {
@@ -384,7 +395,7 @@ export const outbound = (model: string, params: { limit?: number; include_meta?:
   );
 };
 
-// ── Admin demo (procurement staging summary) ───────────────────────
+// Admin demo
 export const procurementStagingSummary = () =>
   req<{ tables?: Record<string, number> } & Record<string, unknown>>(
     "/admin/demo/procurement-staging-summary",

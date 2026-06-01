@@ -11,6 +11,7 @@ import { Select } from "@/components/ui/Select";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/Table";
 import {
   ApiError,
+  apiPath,
   CONNECTION_TYPES,
   createConnection,
   deleteConnection,
@@ -134,7 +135,7 @@ export default function ConnectionsPage() {
     <>
       <PageHeader
         title="Connections"
-        subtitle="External systems (password encrypted, never shown). MDP /connections."
+        subtitle={`Public API: ${apiPath("/connections")} · Backend route: /connections.`}
         action={<Button onClick={openNew}>New Connection</Button>}
       />
       {err && <p className="mb-4 rounded-md bg-danger/10 px-3 py-2 text-sm text-danger">{err}</p>}
@@ -142,7 +143,7 @@ export default function ConnectionsPage() {
         <CardHeader title="All connections" subtitle={`${conns.length} total`} />
         <CardBody>
           {loading ? (
-            <p className="text-sm text-neutral-400">Loading…</p>
+            <p className="text-sm text-neutral-400">Loading...</p>
           ) : (
             <Table>
               <THead>
@@ -163,7 +164,7 @@ export default function ConnectionsPage() {
                       <Badge tone="info">{c.type}</Badge>
                     </TD>
                     <TD className="font-mono text-xs">
-                      {c.base_url || (c.host ? `${c.host}${c.port ? ":" + c.port : ""}${c.database_name ? "/" + c.database_name : ""}` : "—")}
+                      {c.base_url || (c.host ? `${c.host}${c.port ? ":" + c.port : ""}${c.database_name ? "/" + c.database_name : ""}` : "-")}
                     </TD>
                     <TD>
                       <Badge tone={c.status === "active" ? "success" : "neutral"}>{c.status}</Badge>
@@ -177,7 +178,7 @@ export default function ConnectionsPage() {
                     <TD>
                       <div className="flex gap-2">
                         <Button size="sm" variant="secondary" onClick={() => runTest(c)} disabled={testing === c.id}>
-                          {testing === c.id ? "Testing…" : "Test"}
+                          {testing === c.id ? "Testing..." : "Test"}
                         </Button>
                         <Button size="sm" variant="ghost" onClick={() => remove(c)}>
                           Delete
@@ -202,7 +203,7 @@ export default function ConnectionsPage() {
               Cancel
             </Button>
             <Button onClick={save} disabled={busy}>
-              {busy ? "Saving…" : "Create"}
+              {busy ? "Saving..." : "Create"}
             </Button>
           </>
         }
@@ -236,7 +237,7 @@ export default function ConnectionsPage() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
+                placeholder="********"
               />
             </>
           )}

@@ -62,10 +62,12 @@ Current pattern:
 
 - Frontend: `https://your-domain.example.com`
 - API through Caddy: `https://your-domain.example.com/api`
-- Swagger docs: `https://your-domain.example.com/docs`
-- OpenAPI: `https://your-domain.example.com/openapi.json`
+- Swagger docs through the public API prefix: `https://your-domain.example.com/api/docs`
+- OpenAPI through the public API prefix: `https://your-domain.example.com/api/openapi.json`
 
 The Caddy `handle_path /api/*` rule strips `/api` before forwarding to the backend. This allows the current FastAPI routes, such as `/auth/login` and `/outbound/{model_name}`, to keep working without a backend route prefix refactor. In production, leave `NEXT_PUBLIC_API_URL` empty so the Next.js frontend calls same-origin `/api/*`.
+
+The FastAPI backend routes remain mounted at root internally. Frontend pages and components must use canonical backend paths through `frontend/src/lib/api.ts`; the API helper is responsible for turning `/data-models` into `/api/data-models` in production or `http://localhost:8000/data-models` in local direct mode.
 
 Before deployment, replace `your-domain.example.com` in `deploy/Caddyfile` with the real domain.
 

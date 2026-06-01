@@ -11,6 +11,7 @@ import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/Table";
 import {
   API_DIRECTIONS,
   ApiError,
+  apiPath,
   createApiKey,
   deleteApiKey,
   listApiKeys,
@@ -111,7 +112,7 @@ export default function ApiKeysPage() {
     <>
       <PageHeader
         title="API Keys"
-        subtitle="External-system access (X-API-Key). MDP /api-keys."
+        subtitle={`Public API: ${apiPath("/api-keys")} · Backend route: /api-keys.`}
         action={<Button onClick={openNew}>New API Key</Button>}
       />
       {err && <p className="mb-4 rounded-md bg-danger/10 px-3 py-2 text-sm text-danger">{err}</p>}
@@ -119,7 +120,7 @@ export default function ApiKeysPage() {
         <CardHeader title="All keys" subtitle={`${keys.length} total`} />
         <CardBody>
           {loading ? (
-            <p className="text-sm text-neutral-400">Loading…</p>
+            <p className="text-sm text-neutral-400">Loading...</p>
           ) : (
             <Table>
               <THead>
@@ -137,8 +138,8 @@ export default function ApiKeysPage() {
                 {keys.map((k) => (
                   <TR key={k.id}>
                     <TD className="font-medium">{k.name}</TD>
-                    <TD>{k.source_system || "—"}</TD>
-                    <TD className="font-mono text-xs">{k.key_prefix}…</TD>
+                    <TD>{k.source_system || "-"}</TD>
+                    <TD className="font-mono text-xs">{k.key_prefix}...</TD>
                     <TD>
                       <div className="flex gap-1">
                         {k.allowed_directions.map((d) => (
@@ -183,7 +184,7 @@ export default function ApiKeysPage() {
               Cancel
             </Button>
             <Button onClick={save} disabled={busy}>
-              {busy ? "Creating…" : "Create"}
+              {busy ? "Creating..." : "Create"}
             </Button>
           </>
         }
@@ -227,7 +228,7 @@ export default function ApiKeysPage() {
       >
         <div className="space-y-3">
           <div className="flex items-center gap-2 rounded-md bg-warning/10 px-3 py-2 text-sm text-warning">
-            Copy this key now — it is shown <strong>only once</strong> and cannot be retrieved later.
+            Copy this key now - it is shown <strong>only once</strong> and cannot be retrieved later.
           </div>
           <p className="text-sm text-neutral-500">Key for <span className="font-semibold">{created?.name}</span>:</p>
           <code className="block break-all rounded-md bg-neutral-900 px-3 py-2 font-mono text-xs text-white">

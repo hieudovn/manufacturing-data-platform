@@ -89,6 +89,8 @@ Production startup requires `APP_ENV=production` and rejects default or weak sec
 
 The frontend is now a Next.js App Router application migrated from the `Hieu123k/MDP-ver1.0` variant repository. Local development uses `NEXT_PUBLIC_API_URL=http://localhost:8000` to call FastAPI directly. Production leaves `NEXT_PUBLIC_API_URL` empty so the browser calls same-origin `/api/*`; Caddy strips `/api` and forwards requests to the original FastAPI root routes.
 
+Frontend code should call canonical backend paths through `frontend/src/lib/api.ts`, for example `apiFetch("/data-models")` or `apiPath("/outbound/supplier")`. Do not hardcode `/api` inside pages or components; the API helper adds the public prefix when needed.
+
 ## URLs
 
 - Frontend: http://localhost:3000

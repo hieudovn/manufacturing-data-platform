@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { Select } from "@/components/ui/Select";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/Table";
-import { ApiError, listTransactions, type Transaction } from "@/lib/api";
+import { ApiError, apiPath, listTransactions, type Transaction } from "@/lib/api";
 
 function statusTone(s: string): BadgeTone {
   if (s === "success") return "success";
@@ -46,7 +46,7 @@ export default function TransactionsPage() {
     <>
       <PageHeader
         title="Transactions"
-        subtitle="Ingest / outbound audit log. MDP /transactions."
+        subtitle={`Public API: ${apiPath("/transactions")} · Backend route: /transactions.`}
         action={<Button variant="secondary" onClick={reload}>Refresh</Button>}
       />
       {err && <p className="mb-4 rounded-md bg-danger/10 px-3 py-2 text-sm text-danger">{err}</p>}
@@ -71,7 +71,7 @@ export default function TransactionsPage() {
         />
         <CardBody>
           {loading ? (
-            <p className="text-sm text-neutral-400">Loading…</p>
+            <p className="text-sm text-neutral-400">Loading...</p>
           ) : items.length === 0 ? (
             <p className="text-sm text-neutral-400">
               No transactions yet. They appear after an inbound ingest or outbound query.
@@ -98,9 +98,9 @@ export default function TransactionsPage() {
                         <Badge tone={t.direction === "inbound" ? "info" : "neutral"}>{t.direction}</Badge>
                       </TD>
                       <TD className="text-xs">{t.protocol}</TD>
-                      <TD className="font-mono text-xs">{t.endpoint || "—"}</TD>
-                      <TD className="text-xs">{t.auth_type || "—"}</TD>
-                      <TD className="text-xs">{t.source_system || "—"}</TD>
+                      <TD className="font-mono text-xs">{t.endpoint || "-"}</TD>
+                      <TD className="text-xs">{t.auth_type || "-"}</TD>
+                      <TD className="text-xs">{t.source_system || "-"}</TD>
                       <TD>
                         <Badge tone={statusTone(t.status)}>{t.status}</Badge>
                       </TD>

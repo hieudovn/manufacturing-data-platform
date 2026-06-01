@@ -12,6 +12,7 @@ import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/Table";
 import { useAuth } from "@/components/auth/AuthProvider";
 import {
   ApiError,
+  apiPath,
   createUser,
   deleteUser,
   listUsers,
@@ -140,7 +141,7 @@ export default function UsersPage() {
     <>
       <PageHeader
         title="Users"
-        subtitle="Accounts & roles (MDP /users)."
+        subtitle={`Public API: ${apiPath("/users")} · Backend route: /users.`}
         action={<Button onClick={openNew}>New User</Button>}
       />
       {err && <p className="mb-4 rounded-md bg-danger/10 px-3 py-2 text-sm text-danger">{err}</p>}
@@ -148,7 +149,7 @@ export default function UsersPage() {
         <CardHeader title="All users" subtitle={`${users.length} total`} />
         <CardBody>
           {loading ? (
-            <p className="text-sm text-neutral-400">Loading…</p>
+            <p className="text-sm text-neutral-400">Loading...</p>
           ) : (
             <Table>
               <THead>
@@ -165,7 +166,7 @@ export default function UsersPage() {
                 {users.map((u) => (
                   <TR key={u.id}>
                     <TD className="font-medium">{u.username}</TD>
-                    <TD>{u.full_name || "—"}</TD>
+                    <TD>{u.full_name || "-"}</TD>
                     <TD>{u.email}</TD>
                     <TD>
                       <Badge tone="info">{u.role}</Badge>
@@ -208,7 +209,7 @@ export default function UsersPage() {
               Cancel
             </Button>
             <Button onClick={save} disabled={busy}>
-              {busy ? "Saving…" : "Save"}
+              {busy ? "Saving..." : "Save"}
             </Button>
           </>
         }
@@ -246,7 +247,7 @@ export default function UsersPage() {
             type="password"
             value={fPwd}
             onChange={(e) => setFPwd(e.target.value)}
-            placeholder="••••••••"
+            placeholder="********"
           />
           <label className="flex items-center gap-2 text-sm text-neutral-700">
             <input type="checkbox" checked={fActive} onChange={(e) => setFActive(e.target.checked)} />

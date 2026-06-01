@@ -6,6 +6,7 @@ import { Card, CardBody } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { apiPath } from "@/lib/api";
 import { ShieldCheck, LogOut } from "lucide-react";
 
 export default function ProfilePage() {
@@ -19,7 +20,10 @@ export default function ProfilePage() {
 
   return (
     <>
-      <PageHeader title="Profile" subtitle="Current session (JWT Bearer via MDP /auth)." />
+      <PageHeader
+        title="Profile"
+        subtitle={`Public API: ${apiPath("/auth/me")} · Backend route: /auth/me.`}
+      />
       <Card className="max-w-md">
         <CardBody className="space-y-4">
           <div className="flex items-center gap-2 rounded-md bg-success/10 px-3 py-2 text-sm text-success">

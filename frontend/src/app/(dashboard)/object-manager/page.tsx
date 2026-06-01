@@ -11,6 +11,7 @@ import { Select } from "@/components/ui/Select";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/Table";
 import {
   ApiError,
+  apiPath,
   ATTR_TYPES,
   createDataModel,
   deleteDataModel,
@@ -26,7 +27,7 @@ import {
 } from "@/lib/api";
 
 const SYSTEM_COLS = new Set(["id", "raw_payload", "created_at", "updated_at"]);
-// MDP forbids attribute names that collide with system columns → rename, keep source_column.
+// MDP forbids attribute names that collide with system columns -> rename, keep source_column.
 const attrName = (col: string) => (SYSTEM_COLS.has(col) ? `source_${col}` : col);
 
 type RowA = { name: string; data_type: AttrType; key: boolean };
@@ -53,7 +54,7 @@ export default function DataModelsPage() {
     reload();
   }, [reload]);
 
-  // ── create form state ──
+  // Create form state
   const [kind, setKind] = useState<"A" | "B">("B");
   const [name, setName] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -106,7 +107,7 @@ export default function DataModelsPage() {
       .catch((e) => setFormErr(e instanceof ApiError ? e.message : String(e)));
   }, [open, kind, bSchema]);
 
-  // load columns when table chosen (Type B) → default-include all, PK = first
+  // load columns when table chosen (Type B) -> default-include all, PK = first
   useEffect(() => {
     if (!open || kind !== "B" || !bSchema || !bTable) return;
     listColumns(bSchema, bTable)
@@ -206,7 +207,7 @@ export default function DataModelsPage() {
     <>
       <PageHeader
         title="Data Models"
-        subtitle="Type A (generated table) · Type B (mapping over a source). MDP /data-models."
+        subtitle={`Public API: ${apiPath("/data-models")} · Backend route: /data-models.`}
         action={<Button onClick={openNew}>New Data Model</Button>}
       />
       {err && <p className="mb-4 rounded-md bg-danger/10 px-3 py-2 text-sm text-danger">{err}</p>}
@@ -214,7 +215,7 @@ export default function DataModelsPage() {
         <CardHeader title="All data models" subtitle={`${models.length} total`} />
         <CardBody>
           {loading ? (
-            <p className="text-sm text-neutral-400">Loading…</p>
+            <p className="text-sm text-neutral-400">Loading...</p>
           ) : (
             <Table>
               <THead>
@@ -232,7 +233,7 @@ export default function DataModelsPage() {
                 {models.map((m) => (
                   <TR key={m.id}>
                     <TD className="font-mono text-xs">{m.name}</TD>
-                    <TD>{m.display_name || "—"}</TD>
+                    <TD>{m.display_name || "-"}</TD>
                     <TD>
                       <Badge tone={m.type === "A" ? "success" : "info"}>
                         {m.type === "A" ? "Type A" : "Type B"}
@@ -240,10 +241,10 @@ export default function DataModelsPage() {
                     </TD>
                     <TD className="font-mono text-xs">
                       {m.type === "A"
-                        ? m.generated_table || "—"
+                        ? m.generated_table || "-"
                         : m.source_schema && m.source_table
                           ? `${m.source_schema}.${m.source_table}`
-                          : "—"}
+                          : "-"}
                     </TD>
                     <TD className="tabular-nums">{m.attributes?.length ?? 0}</TD>
                     <TD>
@@ -274,7 +275,7 @@ export default function DataModelsPage() {
               Cancel
             </Button>
             <Button onClick={save} disabled={busy}>
-              {busy ? "Saving…" : "Create"}
+              {busy ? "Saving..." : "Create"}
             </Button>
           </>
         }
@@ -293,14 +294,14 @@ export default function DataModelsPage() {
               onClick={() => setKind("B")}
               className={`flex-1 rounded-md border px-3 py-2 text-sm ${kind === "B" ? "border-brand bg-brand/10 text-brand" : "border-neutral-300 text-neutral-600"}`}
             >
-              Type B — map a source table
+              Type B - map a source table
             </button>
             <button
               type="button"
               onClick={() => setKind("A")}
               className={`flex-1 rounded-md border px-3 py-2 text-sm ${kind === "A" ? "border-brand bg-brand/10 text-brand" : "border-neutral-300 text-neutral-600"}`}
             >
-              Type A — generated table
+              Type A - generated table
             </button>
           </div>
 
@@ -329,7 +330,7 @@ export default function DataModelsPage() {
                     className="px-2 text-neutral-400 hover:text-danger"
                     onClick={() => setRowsA((rs) => (rs.length > 1 ? rs.filter((_, j) => j !== i) : rs))}
                   >
-                    ✕
+                    x
                   </button>
                 </div>
               ))}
@@ -345,7 +346,7 @@ export default function DataModelsPage() {
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <Select label="Source schema" value={bSchema} onChange={(e) => setBSchema(e.target.value)}>
-                  <option value="">— schema —</option>
+                  <option value="">- schema -</option>
                   {schemas.map((s) => (
                     <option key={s} value={s}>
                       {s}
@@ -353,7 +354,7 @@ export default function DataModelsPage() {
                   ))}
                 </Select>
                 <Select label="Source table" value={bTable} onChange={(e) => setBTable(e.target.value)}>
-                  <option value="">— table —</option>
+                  <option value="">- table -</option>
                   {tables.map((t) => (
                     <option key={t} value={t}>
                       {t}
@@ -363,7 +364,7 @@ export default function DataModelsPage() {
               </div>
               {cols.length > 0 && (
                 <div className="max-h-64 space-y-1 overflow-y-auto rounded-md border border-neutral-200 p-2">
-                  <p className="px-1 text-xs text-neutral-500">Columns (✓ include · ● primary key):</p>
+                  <p className="px-1 text-xs text-neutral-500">Columns (include / primary key):</p>
                   {cols.map((c) => (
                     <div key={c.column_name} className="flex items-center gap-2 px-1 text-sm">
                       <input
@@ -405,7 +406,7 @@ export default function DataModelsPage() {
         }
       >
         <p className="text-sm text-neutral-600">
-          Deactivate <span className="font-semibold">{del?.name}</span> (status → inactive)?
+          Deactivate <span className="font-semibold">{del?.name}</span> (status changes to inactive)?
           {del?.type === "A" ? " The generated table is kept." : ""}
         </p>
       </Modal>
