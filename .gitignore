@@ -19,6 +19,7 @@ npm-debug.log*
 
 # Docker and local data
 *.log
+.tmp/
 backups/*.dump
 backups/*.sql
 backups/*.gz

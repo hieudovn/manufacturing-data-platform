@@ -1,11 +1,11 @@
 # Avenue Manufacturing Data Platform
 
-Avenue Manufacturing Data Platform (Avenue MDP) is a Dockerized monorepo MVP foundation for configurable manufacturing data services. The current milestone includes FastAPI, React/Vite, PostgreSQL 16, SQLAlchemy, Alembic, Docker Compose, pgAdmin, JWT authentication, user management, data model metadata CRUD, generated Type A storage tables, dynamic inbound/outbound APIs, transaction logging, API key authentication for external systems, and external connection metadata management.
+Avenue Manufacturing Data Platform (Avenue MDP) is a Dockerized monorepo MVP foundation for configurable manufacturing data services. The current milestone includes FastAPI, Next.js, PostgreSQL 16, SQLAlchemy, Alembic, Docker Compose, pgAdmin, JWT authentication, user management, data model metadata CRUD, generated Type A storage tables, dynamic inbound/outbound APIs, transaction logging, API key authentication for external systems, and external connection metadata management.
 
 ## Architecture Summary
 
 - `backend/`: Python FastAPI service running on port `8000`
-- `frontend/`: React + Vite dashboard running on port `3000`
+- `frontend/`: Next.js App Router dashboard running on port `3000`
 - `postgres`: PostgreSQL 16 database with a named Docker volume
 - `pgadmin`: Optional database administration UI on port `5050`
 
@@ -68,16 +68,12 @@ docker compose exec backend pytest
 Run the frontend build locally:
 
 ```bash
-docker compose exec frontend npm run build
-```
-
-If you are not using the frontend container, run:
-
-```bash
 cd frontend
 npm install
 npm run build
 ```
+
+The production frontend Docker image uses the Next.js standalone output, so `docker compose build frontend` is the container build check.
 
 ## Production Deployment Preparation
 
@@ -90,6 +86,8 @@ Production deployment assets are included for a cloud server Docker Compose depl
 - `scripts/restore_postgres.sh`: PostgreSQL restore script.
 
 Production startup requires `APP_ENV=production` and rejects default or weak secrets. See [docs/deployment.md](docs/deployment.md) before deploying.
+
+The frontend is now a Next.js App Router application migrated from the `Hieu123k/MDP-ver1.0` variant repository. Local development uses `NEXT_PUBLIC_API_URL=http://localhost:8000` to call FastAPI directly. Production leaves `NEXT_PUBLIC_API_URL` empty so the browser calls same-origin `/api/*`; Caddy strips `/api` and forwards requests to the original FastAPI root routes.
 
 ## URLs
 

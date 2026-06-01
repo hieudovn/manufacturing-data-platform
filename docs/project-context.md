@@ -42,7 +42,7 @@ This creates a controlled data service layer between source systems and consumin
 ## 5. Current Technology Stack
 
 - Backend: Python FastAPI
-- Frontend: React + Vite
+- Frontend: Next.js App Router
 - Database: PostgreSQL 16
 - ORM: SQLAlchemy
 - Migration: Alembic
@@ -56,7 +56,7 @@ This creates a controlled data service layer between source systems and consumin
 ## 6. Current Repository Structure
 
 - `backend/`: FastAPI application, SQLAlchemy models, Alembic migrations, API routes, services, schemas, tests.
-- `frontend/`: React/Vite Admin UI for users, data models, browsers, transactions, API keys, connections, and demo data.
+- `frontend/`: Next.js App Router Admin UI for users, data models, browsers, transactions, API keys, connections, and demo data.
 - `docs/`: Architecture, API, data model, deployment, connection manager, and project context documentation.
 - `docker-compose.yml`: Local development stack for PostgreSQL, backend, frontend, and pgAdmin.
 - `.env.example`: Environment variable template for local configuration and secrets.
@@ -204,6 +204,9 @@ Direction:
 - Product name: Avenue Manufacturing Data Platform
 - Short name: Avenue MDP
 - Enterprise admin UI
+- Frontend is a Next.js App Router application migrated from the `Hieu123k/MDP-ver1.0` variant repository
+- Local frontend builds use `NEXT_PUBLIC_API_URL=http://localhost:8000`
+- Production frontend builds leave `NEXT_PUBLIC_API_URL` empty and call same-origin `/api/*` through Caddy
 - Dark sidebar with light content area
 - Avenue red accent color
 - Use Inter or IBM Plex Sans
@@ -218,13 +221,13 @@ Direction:
 
 1. Finish UI cleanup if needed.
 2. Create UAT/training script.
-3. Add backend/API smoke tests.
-4. Add GitHub Actions CI.
-5. Add production config hardening.
-6. Add `docker-compose.prod.yml`.
-7. Add reverse proxy and HTTPS.
-8. Add PostgreSQL backup/restore.
-9. Deploy to cloud server.
+3. Review the migrated Next.js frontend against the current demo flow.
+4. Add or refine frontend smoke tests.
+5. Harden production secrets and server operations during deployment rehearsal.
+6. Deploy to a cloud server.
+7. Validate Caddy `/api` routing and HTTPS.
+8. Validate PostgreSQL backup/restore on the target server.
+9. Add release/version tagging.
 10. Later: Oracle JDE connector and sync jobs.
 
 ## 18. Deferred Future Phases

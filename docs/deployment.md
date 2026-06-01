@@ -7,7 +7,7 @@ This document describes cloud server preparation for Avenue Manufacturing Data P
 The production Docker Compose stack runs these services on one Linux server:
 
 - `reverse-proxy`: Caddy, the only public service, exposing ports `80` and `443`.
-- `frontend`: React/Vite app served internally on port `3000`.
+- `frontend`: Next.js App Router app served internally on port `3000`.
 - `backend`: FastAPI app served internally on port `8000`.
 - `postgres`: PostgreSQL 16 with a persistent named volume.
 - `pgadmin`: optional admin profile, disabled by default.
@@ -39,7 +39,7 @@ Edit `.env.production` and replace every placeholder:
 - `JWT_SECRET_KEY`
 - `CONNECTION_SECRET_KEY`
 - `CORS_ORIGINS`
-- `VITE_API_BASE_URL`
+- `NEXT_PUBLIC_API_URL`
 - `PGADMIN_DEFAULT_PASSWORD`
 
 Use long, random values for `JWT_SECRET_KEY` and `CONNECTION_SECRET_KEY`. Production startup fails if these values are missing, too short, or still using demo defaults.
@@ -49,7 +49,7 @@ Production example:
 ```env
 APP_ENV=production
 CORS_ORIGINS=["https://your-domain.example.com"]
-VITE_API_BASE_URL=https://your-domain.example.com/api
+NEXT_PUBLIC_API_URL=
 ```
 
 Do not commit `.env.production`.
@@ -65,7 +65,7 @@ Current pattern:
 - Swagger docs: `https://your-domain.example.com/docs`
 - OpenAPI: `https://your-domain.example.com/openapi.json`
 
-The Caddy `handle_path /api/*` rule strips `/api` before forwarding to the backend. This allows the current FastAPI routes, such as `/auth/login` and `/outbound/{model_name}`, to keep working without a backend route prefix refactor.
+The Caddy `handle_path /api/*` rule strips `/api` before forwarding to the backend. This allows the current FastAPI routes, such as `/auth/login` and `/outbound/{model_name}`, to keep working without a backend route prefix refactor. In production, leave `NEXT_PUBLIC_API_URL` empty so the Next.js frontend calls same-origin `/api/*`.
 
 Before deployment, replace `your-domain.example.com` in `deploy/Caddyfile` with the real domain.
 

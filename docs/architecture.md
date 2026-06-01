@@ -6,7 +6,7 @@ This milestone establishes a clean, Dockerized project foundation for Avenue Man
 
 ### Frontend
 
-The frontend is a React application built with Vite. It runs on port `3000` and provides login plus a consolidated Admin UI with a sidebar, dashboard metrics, data model management, Type B mapping, DB browsing, outbound data browsing, transaction viewing, API key management, connection management, demo data controls, and user viewing.
+The frontend is a Next.js App Router application. It runs on port `3000` and provides login plus a consolidated Admin UI with a sidebar, dashboard metrics, data model management, Type B mapping, DB browsing, outbound data browsing, transaction viewing, API key management, connection management, demo data controls, and user viewing.
 
 ### Backend
 
@@ -72,7 +72,7 @@ Implemented:
 - Type B mapping validation and mapped preview backend APIs
 - SQLAlchemy database connection setup
 - Alembic migration setup
-- React/Vite dashboard shell
+- Next.js dashboard shell
 - Frontend login, protected dashboard, and data model page
 - Local documentation
 
