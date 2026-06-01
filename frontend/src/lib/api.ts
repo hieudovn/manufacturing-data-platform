@@ -493,6 +493,7 @@ export type TargetValidationResult = {
   sample_rows: Record<string, unknown>[];
 };
 export const listMigrationJobs = () => req<MigrationJob[]>("/migration-jobs");
+export const getMigrationJob = (id: string) => req<MigrationJob>(`/migration-jobs/${id}`);
 export const createMigrationJob = (body: Record<string, unknown>) =>
   req<MigrationJob>("/migration-jobs", { method: "POST", body: JSON.stringify(body) });
 export const updateMigrationJob = (id: string, body: Record<string, unknown>) =>
@@ -503,6 +504,7 @@ export const listMigrationRuns = (jobId: string) =>
   req<MigrationRun[]>(`/migration-jobs/${jobId}/runs`);
 export const createMigrationRun = (jobId: string, body: Record<string, unknown>) =>
   req<MigrationRun>(`/migration-jobs/${jobId}/runs`, { method: "POST", body: JSON.stringify(body) });
+export const getMigrationRun = (id: string) => req<MigrationRun>(`/migration-runs/${id}`);
 export const updateMigrationRun = (id: string, body: Record<string, unknown>) =>
   req<MigrationRun>(`/migration-runs/${id}`, { method: "PUT", body: JSON.stringify(body) });
 export const validateMigrationTarget = (runId: string) =>
