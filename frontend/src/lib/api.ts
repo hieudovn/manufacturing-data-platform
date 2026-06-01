@@ -520,6 +520,32 @@ export type TargetValidationResult = {
   validations: MigrationValidation[];
   sample_rows: Record<string, unknown>[];
 };
+export type MigrationTemplate = {
+  template_key: string;
+  display_name: string;
+  description: string;
+  group: string;
+  template_type: string;
+  source_system: string;
+  source_type: string;
+  migration_tool: string;
+  source_schema_suggestion: string | null;
+  source_table: string | null;
+  related_source_tables: string[] | null;
+  target_schema: string;
+  target_table: string;
+  primary_key_columns: string[];
+  load_mode: string;
+  initial_load_strategy: string | null;
+  incremental_strategy: string | null;
+  watermark_column: string | null;
+  watermark_column_type: string | null;
+  lookback_window_days: number | null;
+  validation_level: string;
+  estimated_rows: number | null;
+  estimated_size_gb: number | null;
+  config: Record<string, unknown> | null;
+};
 export const listMigrationJobs = () => req<MigrationJob[]>("/migration-jobs");
 export const getMigrationJob = (id: string) => req<MigrationJob>(`/migration-jobs/${id}`);
 export const createMigrationJob = (body: Record<string, unknown>) =>
@@ -537,6 +563,14 @@ export const updateMigrationRun = (id: string, body: Record<string, unknown>) =>
   req<MigrationRun>(`/migration-runs/${id}`, { method: "PUT", body: JSON.stringify(body) });
 export const validateMigrationTarget = (runId: string) =>
   req<TargetValidationResult>(`/migration-runs/${runId}/validate-target`, { method: "POST" });
+export const listMigrationTemplates = () => req<MigrationTemplate[]>("/migration-templates");
+export const getMigrationTemplate = (templateKey: string) =>
+  req<MigrationTemplate>(`/migration-templates/${encodeURIComponent(templateKey)}`);
+export const createMigrationJobFromTemplate = (templateKey: string, body: Record<string, unknown>) =>
+  req<MigrationJob>(`/migration-templates/${encodeURIComponent(templateKey)}/create-job`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 
 // Transactions
 export type Transaction = {

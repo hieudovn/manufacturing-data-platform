@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
+  ClipboardList,
   Eye,
   History,
   Pencil,
@@ -22,8 +23,10 @@ import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/Table";
 import {
   ApiError,
   apiPath,
+  createMigrationJobFromTemplate,
   createMigrationJob,
   createMigrationRun,
+  listMigrationTemplates,
   deleteMigrationJob,
   getMigrationJob,
   getMigrationRun,
@@ -43,6 +46,7 @@ import {
   validateMigrationTarget,
   type MigrationJob,
   type MigrationRun,
+  type MigrationTemplate,
   type TargetValidationResult,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -105,6 +109,16 @@ type RunForm = {
   validation_status: string;
   log_text: string;
   error_message: string;
+};
+
+type TemplateForm = {
+  name: string;
+  source_connection_id: string;
+  source_schema: string;
+  target_table: string;
+  estimated_rows: string;
+  estimated_size_gb: string;
+  config_json: string;
 };
 
 function badgeTone(value?: string | null): BadgeTone {
@@ -263,6 +277,18 @@ function emptyRunForm(): RunForm {
   };
 }
 
+function emptyTemplateForm(template?: MigrationTemplate | null): TemplateForm {
+  return {
+    name: template ? `migrate_${template.template_key}` : "",
+    source_connection_id: "",
+    source_schema: template?.source_schema_suggestion || "",
+    target_table: template?.target_table || "",
+    estimated_rows: template?.estimated_rows == null ? "" : String(template.estimated_rows),
+    estimated_size_gb: template?.estimated_size_gb == null ? "" : String(template.estimated_size_gb),
+    config_json: "",
+  };
+}
+
 function runFormFromRun(run: MigrationRun): RunForm {
   return {
     run_type: run.run_type,
@@ -414,6 +440,13 @@ export default function MigrationJobsPage() {
   const [runParentJobId, setRunParentJobId] = useState<string | null>(null);
 
   const [validation, setValidation] = useState<TargetValidationResult | null>(null);
+  const [templateOpen, setTemplateOpen] = useState(false);
+  const [templates, setTemplates] = useState<MigrationTemplate[]>([]);
+  const [selectedTemplateKey, setSelectedTemplateKey] = useState("");
+  const [templateForm, setTemplateForm] = useState<TemplateForm>(emptyTemplateForm());
+  const [templateLoading, setTemplateLoading] = useState(false);
+
+  const selectedTemplate = templates.find((template) => template.template_key === selectedTemplateKey) || null;
 
   const reloadJobs = useCallback(async () => {
     setLoading(true);
@@ -437,6 +470,33 @@ export default function MigrationJobsPage() {
 
   function setRunValue<K extends keyof RunForm>(key: K, value: RunForm[K]) {
     setRunForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function setTemplateValue<K extends keyof TemplateForm>(key: K, value: TemplateForm[K]) {
+    setTemplateForm((current) => ({ ...current, [key]: value }));
+  }
+
+  async function openTemplateCreate() {
+    setTemplateOpen(true);
+    setTemplateLoading(true);
+    setModalError(null);
+    try {
+      const loaded = await listMigrationTemplates();
+      setTemplates(loaded);
+      const first = loaded[0] || null;
+      setSelectedTemplateKey(first?.template_key || "");
+      setTemplateForm(emptyTemplateForm(first));
+    } catch (error) {
+      setModalError(errorMessage(error));
+    } finally {
+      setTemplateLoading(false);
+    }
+  }
+
+  function changeSelectedTemplate(templateKey: string) {
+    const template = templates.find((item) => item.template_key === templateKey) || null;
+    setSelectedTemplateKey(templateKey);
+    setTemplateForm(emptyTemplateForm(template));
   }
 
   function openCreateJob() {
@@ -515,6 +575,42 @@ export default function MigrationJobsPage() {
       status: jobForm.status,
       config,
     };
+  }
+
+  function templatePayload(): Record<string, unknown> {
+    let config: Record<string, unknown> | null = null;
+    if (templateForm.config_json.trim()) {
+      const parsed = JSON.parse(templateForm.config_json);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new Error("Config override must be a JSON object.");
+      }
+      config = parsed as Record<string, unknown>;
+    }
+    return {
+      name: templateForm.name.trim() || null,
+      source_connection_id: templateForm.source_connection_id.trim() || null,
+      source_schema: templateForm.source_schema.trim() || null,
+      target_table: templateForm.target_table.trim() || null,
+      estimated_rows: parseNullableNumber(templateForm.estimated_rows),
+      estimated_size_gb: parseNullableNumber(templateForm.estimated_size_gb),
+      config,
+    };
+  }
+
+  async function createFromTemplate() {
+    if (!selectedTemplateKey) return;
+    setBusy(true);
+    setModalError(null);
+    try {
+      await createMigrationJobFromTemplate(selectedTemplateKey, templatePayload());
+      setNotice("Migration job created from template.");
+      setTemplateOpen(false);
+      await reloadJobs();
+    } catch (error) {
+      setModalError(errorMessage(error));
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function saveJob() {
@@ -804,6 +900,88 @@ export default function MigrationJobsPage() {
     );
   }
 
+  function renderTemplateCreate() {
+    return (
+      <div className="space-y-4">
+        <p className="rounded-md bg-info/10 px-3 py-2 text-sm text-info">
+          Templates create migration job records for external ora2pg or curated-view tracking. They do not execute migration workloads inside MDP.
+        </p>
+        {templateLoading ? (
+          <p className="text-sm text-neutral-500">Loading templates...</p>
+        ) : (
+          <>
+            <Section title="JDE Procurement Templates">
+              <div className="grid gap-3 md:grid-cols-[minmax(260px,360px)_1fr]">
+                <Select
+                  label="Template"
+                  value={selectedTemplateKey}
+                  onChange={(event) => changeSelectedTemplate(event.target.value)}
+                >
+                  {templates.map((template) => (
+                    <option key={template.template_key} value={template.template_key}>
+                      {template.display_name}
+                    </option>
+                  ))}
+                </Select>
+                {selectedTemplate && (
+                  <div className="rounded-md border border-neutral-100 bg-neutral-50 px-3 py-2 text-sm text-neutral-700">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold text-neutral-900">{selectedTemplate.display_name}</span>
+                      <Badge tone={selectedTemplate.template_type === "curated_view" ? "neutral" : "info"}>
+                        {selectedTemplate.template_type}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 text-xs text-neutral-600">{selectedTemplate.description}</p>
+                  </div>
+                )}
+              </div>
+            </Section>
+            {selectedTemplate && (
+              <>
+                <Section title="Template Defaults">
+                  <DetailGrid
+                    items={[
+                      ["Source System", selectedTemplate.source_system],
+                      ["Source Type", selectedTemplate.source_type],
+                      ["Migration Tool", selectedTemplate.migration_tool],
+                      ["Source Schema", selectedTemplate.source_schema_suggestion],
+                      ["Source Table", selectedTemplate.source_table],
+                      ["Related Tables", selectedTemplate.related_source_tables],
+                      ["Target", `${selectedTemplate.target_schema}.${selectedTemplate.target_table}`],
+                      ["Primary Key Columns", selectedTemplate.primary_key_columns],
+                      ["Load Mode", titleize(selectedTemplate.load_mode)],
+                      ["Watermark", selectedTemplate.watermark_column],
+                      ["Watermark Type", titleize(selectedTemplate.watermark_column_type)],
+                      ["Validation Level", titleize(selectedTemplate.validation_level)],
+                    ]}
+                  />
+                </Section>
+                <Section title="Overrides" subtitle="Review these defaults with the customer DBA/JDE team before using them for real environments.">
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <Input label="Job Name" value={templateForm.name} onChange={(e) => setTemplateValue("name", e.target.value)} />
+                    <Input label="Source Connection ID" value={templateForm.source_connection_id} onChange={(e) => setTemplateValue("source_connection_id", e.target.value)} />
+                    <Input label="Source Schema" value={templateForm.source_schema} onChange={(e) => setTemplateValue("source_schema", e.target.value)} placeholder="PRODDTA" />
+                    <Input label="Target Table" value={templateForm.target_table} onChange={(e) => setTemplateValue("target_table", e.target.value)} />
+                    <Input label="Estimated Rows" value={templateForm.estimated_rows} onChange={(e) => setTemplateValue("estimated_rows", e.target.value)} />
+                    <Input label="Estimated Size GB" value={templateForm.estimated_size_gb} onChange={(e) => setTemplateValue("estimated_size_gb", e.target.value)} />
+                  </div>
+                  <div className="mt-3">
+                    <TextArea
+                      label="Config Override JSON"
+                      value={templateForm.config_json}
+                      onChange={(value) => setTemplateValue("config_json", value)}
+                      rows={5}
+                    />
+                  </div>
+                </Section>
+              </>
+            )}
+          </>
+        )}
+      </div>
+    );
+  }
+
   function renderRunForm(readOnly = false) {
     return (
       <div className="space-y-4">
@@ -855,7 +1033,15 @@ export default function MigrationJobsPage() {
       <PageHeader
         title="Migration Jobs"
         subtitle={`Public API: ${apiPath("/migration-jobs")} - tracks external ora2pg/bulk loads and validates PostgreSQL staging targets.`}
-        action={<Button onClick={openCreateJob}>New Migration Job</Button>}
+        action={
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" onClick={openTemplateCreate}>
+              <ClipboardList size={16} />
+              Create from Template
+            </Button>
+            <Button onClick={openCreateJob}>New Migration Job</Button>
+          </div>
+        }
       />
       <Card className="mb-4">
         <CardBody>
@@ -943,6 +1129,24 @@ export default function MigrationJobsPage() {
           )}
         </CardBody>
       </Card>
+
+      <Modal
+        open={templateOpen}
+        onClose={() => setTemplateOpen(false)}
+        title="Create Migration Job from Template"
+        className="data-model-dialog overflow-hidden"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setTemplateOpen(false)}>Cancel</Button>
+            <Button onClick={createFromTemplate} disabled={busy || templateLoading || !selectedTemplateKey}>
+              {busy ? "Creating..." : "Create Job"}
+            </Button>
+          </>
+        }
+      >
+        {modalError && <p className="mb-4 rounded-md bg-danger/10 px-3 py-2 text-sm text-danger">{modalError}</p>}
+        {renderTemplateCreate()}
+      </Modal>
 
       <Modal
         open={jobMode !== null}

@@ -277,11 +277,52 @@ Basic validation is target-side and safe for the MVP:
 
 Advanced reconciliation is deferred because source-side full counts and checksums over large JDE tables can be expensive. Future implementations should use partitioned checks, external loader logs, source-side summaries, or worker-managed jobs outside FastAPI request handlers.
 
+## JDE Procurement Migration Templates
+
+JDE Procurement Migration Templates are built-in starting points for creating consistent Migration Job records for common procurement data objects. They do not execute ora2pg. They pre-fill source/target metadata, primary key columns, watermark settings, and validation level so users can register external migration work faster.
+
+Templates are available from:
+
+```text
+GET /migration-templates
+GET /migration-templates/{template_key}
+POST /migration-templates/{template_key}/create-job
+```
+
+Available templates:
+
+| Template | Source | Target | Primary Key | Watermark | Validation |
+| --- | --- | --- | --- | --- | --- |
+| `jde_supplier_master` | `PRODDTA.F0101` with related `F0401` | `mdp_staging.stg_jde_supplier` | `supplier_code` | `UPMJ` (`jde_julian_date`) | `key_integrity` |
+| `jde_po_header` | `PRODDTA.F4301` | `mdp_staging.stg_jde_po_header` | `po_no` | `UPMJ` (`jde_julian_date`) | `key_integrity` |
+| `jde_po_line` | `PRODDTA.F4311` | `mdp_staging.stg_jde_po_line` | `po_no`, `line_no` | `UPMJ` (`jde_julian_date`) | `key_integrity` |
+| `jde_po_receipt` | `PRODDTA.F43121` | `mdp_staging.stg_jde_po_receipt` | `receipt_no` | `UPMJ` (`jde_julian_date`) | `key_integrity` |
+| `jde_ap_invoice` | `PRODDTA.F0411` | `mdp_staging.stg_jde_ap_invoice` | `invoice_no` | `UPMJ` (`jde_julian_date`) | `key_integrity` |
+| `jde_purchase_order_summary_view` | curated PostgreSQL view | `mdp_staging.vw_jde_purchase_order_summary` | `po_no` | none | `basic` |
+
+The purchase order summary template is not an ora2pg source table migration. It tracks and validates the curated PostgreSQL view that combines migrated staging tables for Type B mapping.
+
+When creating a job from a template, users can override:
+
+- job name
+- source connection
+- source schema
+- target table
+- estimated rows
+- estimated size
+- config metadata
+
+JDE table and column names vary by implementation. These templates are practical defaults for the MVP and must be reviewed with the customer DBA/JDE team before production use.
+
 ## APIs
 
 All APIs require JWT authentication.
 
 ```text
+GET /migration-templates
+GET /migration-templates/{template_key}
+POST /migration-templates/{template_key}/create-job
+
 POST /migration-jobs
 GET /migration-jobs
 GET /migration-jobs/{id}
@@ -330,7 +371,7 @@ For real UAT:
 
 ## Future Phases
 
-- JDE migration templates
+- Customer-specific JDE migration template hardening
 - Worker container to invoke ora2pg safely outside FastAPI request handlers
 - Scheduler
 - Incremental sync

@@ -204,3 +204,40 @@ class TargetValidationResponse(BaseModel):
     target_row_count: int | None
     validations: list[MigrationValidationRead]
     sample_rows: list[dict[str, Any]]
+
+
+class MigrationTemplateRead(BaseModel):
+    template_key: str
+    display_name: str
+    description: str
+    group: str = "JDE Procurement"
+    template_type: str = "ora2pg_external_bulk"
+    source_system: str
+    source_type: SourceType
+    migration_tool: MigrationTool
+    source_schema_suggestion: str | None = None
+    source_table: str | None = None
+    related_source_tables: list[str] | None = None
+    target_schema: str
+    target_table: str
+    primary_key_columns: list[str]
+    load_mode: LoadMode
+    initial_load_strategy: InitialLoadStrategy | None = None
+    incremental_strategy: IncrementalStrategy | None = None
+    watermark_column: str | None = None
+    watermark_column_type: WatermarkColumnType | None = None
+    lookback_window_days: int | None = None
+    validation_level: ValidationLevel
+    estimated_rows: int | None = None
+    estimated_size_gb: float | None = None
+    config: dict[str, Any] | None = None
+
+
+class MigrationTemplateCreateJobRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=150)
+    source_connection_id: uuid.UUID | None = None
+    source_schema: str | None = Field(default=None, max_length=150)
+    target_table: str | None = Field(default=None, min_length=1, max_length=150)
+    estimated_rows: int | None = Field(default=None, ge=0)
+    estimated_size_gb: float | None = Field(default=None, ge=0)
+    config: dict[str, Any] | None = None

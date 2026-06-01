@@ -1,6 +1,6 @@
 # Avenue Manufacturing Data Platform
 
-Avenue Manufacturing Data Platform (Avenue MDP) is a Dockerized monorepo MVP foundation for configurable manufacturing data services. The current milestone includes FastAPI, Next.js, PostgreSQL 16, SQLAlchemy, Alembic, Docker Compose, pgAdmin, JWT authentication, user management, data model metadata CRUD, generated Type A storage tables, dynamic inbound/outbound APIs, transaction logging, API key authentication for external systems, external connection metadata management, and migration job tracking for external bulk loaders such as ora2pg.
+Avenue Manufacturing Data Platform (Avenue MDP) is a Dockerized monorepo MVP foundation for configurable manufacturing data services. The current milestone includes FastAPI, Next.js, PostgreSQL 16, SQLAlchemy, Alembic, Docker Compose, pgAdmin, JWT authentication, user management, data model metadata CRUD, generated Type A storage tables, dynamic inbound/outbound APIs, transaction logging, API key authentication for external systems, external connection metadata management, migration job tracking for external bulk loaders such as ora2pg, and JDE procurement migration templates.
 
 ## Architecture Summary
 
@@ -596,6 +596,10 @@ Use ora2pg or another external bulk loader for high-volume full loads. Avenue MD
 Authenticated APIs:
 
 ```text
+GET /migration-templates
+GET /migration-templates/{template_key}
+POST /migration-templates/{template_key}/create-job
+
 POST /migration-jobs
 GET /migration-jobs
 GET /migration-jobs/{id}
@@ -618,6 +622,8 @@ Target validation checks only PostgreSQL staging targets:
 - first 10 sample rows
 
 Source row counts should be entered from ora2pg or external loader logs. See [docs/migration-jobs.md](docs/migration-jobs.md).
+
+The JDE Procurement templates provide starting points for Supplier Master, Purchase Order Header, Purchase Order Line, Purchase Order Receipt, AP Invoice, and the curated Purchase Order Summary View. They pre-fill source/target metadata, primary key columns, watermark fields, and validation level; customer-specific JDE schemas should still be reviewed with the DBA/JDE team.
 
 ## Mock JDE Procurement Staging Data
 
