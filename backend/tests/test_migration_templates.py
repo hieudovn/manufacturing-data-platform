@@ -23,7 +23,8 @@ def test_get_jde_supplier_template(client: TestClient, auth_headers: dict[str, s
     assert template["target_schema"] == "mdp_staging"
     assert template["target_table"] == "stg_jde_supplier"
     assert template["primary_key_columns"] == ["supplier_code"]
-    assert template["watermark_column"] == "UPMJ"
+    assert template["watermark_column"] == "updated_at"
+    assert template["config"]["jde_source_watermark_column"] == "UPMJ"
 
 
 def test_create_migration_job_from_template(client: TestClient, auth_headers: dict[str, str]) -> None:
@@ -45,10 +46,11 @@ def test_create_migration_job_from_template(client: TestClient, auth_headers: di
     assert job["target_table"] == "stg_jde_supplier"
     assert job["load_mode"] == "external_bulk"
     assert job["incremental_strategy"] == "greater_than_last_watermark"
-    assert job["watermark_column"] == "UPMJ"
-    assert job["watermark_column_type"] == "jde_julian_date"
+    assert job["watermark_column"] == "updated_at"
+    assert job["watermark_column_type"] == "datetime"
     assert job["validation_level"] == "key_integrity"
     assert job["config"]["ora2pg_project"] == "jde_supplier_master"
+    assert job["config"]["jde_source_watermark_column"] == "UPMJ"
 
 
 def test_duplicate_generated_template_job_name_returns_409(

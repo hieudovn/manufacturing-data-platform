@@ -291,14 +291,16 @@ POST /migration-templates/{template_key}/create-job
 
 Available templates:
 
-| Template | Source | Target | Primary Key | Watermark | Validation |
-| --- | --- | --- | --- | --- | --- |
-| `jde_supplier_master` | `PRODDTA.F0101` with related `F0401` | `mdp_staging.stg_jde_supplier` | `supplier_code` | `UPMJ` (`jde_julian_date`) | `key_integrity` |
-| `jde_po_header` | `PRODDTA.F4301` | `mdp_staging.stg_jde_po_header` | `po_no` | `UPMJ` (`jde_julian_date`) | `key_integrity` |
-| `jde_po_line` | `PRODDTA.F4311` | `mdp_staging.stg_jde_po_line` | `po_no`, `line_no` | `UPMJ` (`jde_julian_date`) | `key_integrity` |
-| `jde_po_receipt` | `PRODDTA.F43121` | `mdp_staging.stg_jde_po_receipt` | `receipt_no` | `UPMJ` (`jde_julian_date`) | `key_integrity` |
-| `jde_ap_invoice` | `PRODDTA.F0411` | `mdp_staging.stg_jde_ap_invoice` | `invoice_no` | `UPMJ` (`jde_julian_date`) | `key_integrity` |
-| `jde_purchase_order_summary_view` | curated PostgreSQL view | `mdp_staging.vw_jde_purchase_order_summary` | `po_no` | none | `basic` |
+| Template | Source | Target | Primary Key | Target Validation Watermark | Source Watermark Metadata | Validation |
+| --- | --- | --- | --- | --- | --- | --- |
+| `jde_supplier_master` | `PRODDTA.F0101` with related `F0401` | `mdp_staging.stg_jde_supplier` | `supplier_code` | `updated_at` (`datetime`) | `UPMJ` (`jde_julian_date`) in config | `key_integrity` |
+| `jde_po_header` | `PRODDTA.F4301` | `mdp_staging.stg_jde_po_header` | `po_no` | `updated_at` (`datetime`) | `UPMJ` (`jde_julian_date`) in config | `key_integrity` |
+| `jde_po_line` | `PRODDTA.F4311` | `mdp_staging.stg_jde_po_line` | `po_no`, `line_no` | `updated_at` (`datetime`) | `UPMJ` (`jde_julian_date`) in config | `key_integrity` |
+| `jde_po_receipt` | `PRODDTA.F43121` | `mdp_staging.stg_jde_po_receipt` | `receipt_no` | `updated_at` (`datetime`) | `UPMJ` (`jde_julian_date`) in config | `key_integrity` |
+| `jde_ap_invoice` | `PRODDTA.F0411` | `mdp_staging.stg_jde_ap_invoice` | `invoice_no` | `updated_at` (`datetime`) | `UPMJ` (`jde_julian_date`) in config | `key_integrity` |
+| `jde_purchase_order_summary_view` | curated PostgreSQL view | `mdp_staging.vw_jde_purchase_order_summary` | `po_no` | none | none | `basic` |
+
+The job `watermark_column` is target-side because target validation checks PostgreSQL staging columns. JDE source watermark details such as `UPMJ` are preserved in template config for ora2pg/incremental planning.
 
 The purchase order summary template is not an ora2pg source table migration. It tracks and validates the curated PostgreSQL view that combines migrated staging tables for Type B mapping.
 
@@ -368,6 +370,32 @@ For real UAT:
 4. Validate target staging row counts and keys.
 5. Create Type B models from real staging tables/views.
 6. Query governed outbound APIs instead of raw source tables.
+
+## JDE Procurement End-to-End Demo Flow
+
+The Admin UI includes a guided `JDE Demo Flow` page. It demonstrates the complete MVP path without running ora2pg inside MDP:
+
+1. Seed mock procurement staging data.
+2. Create a supplier Migration Job from the `jde_supplier_master` template.
+3. Create an external migration run record.
+4. Validate `mdp_staging.stg_jde_supplier`.
+5. Create the Type B `supplier` model from the `jde_supplier` data model template.
+6. Preview the supplier model.
+7. Test:
+
+```text
+GET /outbound/supplier/SUP-1001
+```
+
+8. Open Transactions to verify outbound API audit logging.
+
+The page also supports the curated purchase order summary flow:
+
+```text
+GET /outbound/purchase_order_summary/PO-2026-0001
+```
+
+In demo mode, seeded PostgreSQL staging data simulates migrated JDE data. In production, an actual external ora2pg load should happen before creating the run record and validating the target.
 
 ## Future Phases
 

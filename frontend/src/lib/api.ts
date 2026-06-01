@@ -659,3 +659,36 @@ export const procurementStagingSummary = () =>
   req<{ tables?: Record<string, number> } & Record<string, unknown>>(
     "/admin/demo/procurement-staging-summary",
   );
+export const seedProcurementStagingData = () =>
+  req<{ status: string; message: string; tables: Record<string, number> }>(
+    "/admin/demo/seed-procurement-staging",
+    { method: "POST" },
+  );
+
+export type JdeWorkflowSubjectStatus = {
+  migration_job_exists: boolean;
+  migration_job_id: string | null;
+  migration_job_status: string | null;
+  latest_run_id: string | null;
+  latest_run_status: string | null;
+  target_validation_status: string | null;
+  target_row_count: number | null;
+  data_model_exists: boolean;
+  data_model_id: string | null;
+  data_model_status: string | null;
+  outbound_api_available: boolean;
+  source_schema: string;
+  source_table: string;
+  outbound_sample_key: string;
+};
+export type JdeWorkflowStatus = {
+  status: string;
+  staging: {
+    procurement_staging_seeded: boolean;
+    tables: Record<string, number>;
+  };
+  supplier: JdeWorkflowSubjectStatus;
+  purchase_order_summary: JdeWorkflowSubjectStatus;
+};
+export const getJdeWorkflowStatus = () =>
+  req<JdeWorkflowStatus>("/demo/jde-procurement/workflow-status");

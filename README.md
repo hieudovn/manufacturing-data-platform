@@ -1,6 +1,6 @@
 # Avenue Manufacturing Data Platform
 
-Avenue Manufacturing Data Platform (Avenue MDP) is a Dockerized monorepo MVP foundation for configurable manufacturing data services. The current milestone includes FastAPI, Next.js, PostgreSQL 16, SQLAlchemy, Alembic, Docker Compose, pgAdmin, JWT authentication, user management, data model metadata CRUD, generated Type A storage tables, dynamic inbound/outbound APIs, transaction logging, API key authentication for external systems, external connection metadata management, migration job tracking for external bulk loaders such as ora2pg, JDE procurement migration templates, and JDE Type B data model templates.
+Avenue Manufacturing Data Platform (Avenue MDP) is a Dockerized monorepo MVP foundation for configurable manufacturing data services. The current milestone includes FastAPI, Next.js, PostgreSQL 16, SQLAlchemy, Alembic, Docker Compose, pgAdmin, JWT authentication, user management, data model metadata CRUD, generated Type A storage tables, dynamic inbound/outbound APIs, transaction logging, API key authentication for external systems, external connection metadata management, migration job tracking for external bulk loaders such as ora2pg, JDE procurement migration templates, JDE Type B data model templates, and a guided JDE procurement demo flow.
 
 ## Architecture Summary
 
@@ -640,6 +640,27 @@ POST /data-model-templates/{template_key}/create-model
 ```
 
 Current JDE Procurement templates include `jde_supplier`, `jde_purchase_order_summary`, `jde_ap_invoice`, `jde_po_header`, and `jde_po_line`. Detailed guidance is in [docs/data-model-templates.md](docs/data-model-templates.md).
+
+## JDE Procurement Demo Flow
+
+The `JDE Demo Flow` page guides demo/UAT users through the complete MVP path:
+
+1. Seed or confirm migrated JDE staging data.
+2. Create a supplier Migration Job from template.
+3. Record an external migration run.
+4. Validate the PostgreSQL target.
+5. Create the supplier Type B model from template.
+6. Preview supplier data.
+7. Test `GET /outbound/supplier/SUP-1001`.
+8. Open Transactions to review audit logging.
+
+The workflow status API is:
+
+```text
+GET /demo/jde-procurement/workflow-status
+```
+
+The flow also includes the curated `purchase_order_summary` model and `GET /outbound/purchase_order_summary/PO-2026-0001`. It does not execute ora2pg; seeded staging data simulates migrated JDE data for demo mode.
 
 ## Mock JDE Procurement Staging Data
 

@@ -85,6 +85,7 @@ This creates a controlled data service layer between source systems and consumin
 - Migration scope, row-limit, time-window, and watermark metadata foundation
 - JDE Procurement Migration Templates
 - JDE Type B Data Model Templates
+- Guided JDE Procurement Demo Flow
 - Data Browser
 - Transaction Monitor
 - Admin UI consolidation
@@ -170,6 +171,7 @@ The MVP includes mock procurement staging data that simulates migrated Oracle JD
 - `/migration-runs`
 - `/migration-templates`
 - `/data-model-templates`
+- `GET /demo/jde-procurement/workflow-status`
 - `/admin/demo/seed-procurement-staging`
 
 ## 13. Security Design
@@ -194,6 +196,7 @@ The MVP includes mock procurement staging data that simulates migrated Oracle JD
 - Data integrity validation starts with target-side checks and can be expanded to source-target reconciliation later.
 - JDE Procurement Migration Templates provide consistent starting points for common JDE procurement staging jobs.
 - JDE Type B Data Model Templates create governed models from validated JDE staging tables/views.
+- The guided JDE Demo Flow demonstrates the MVP path from staging data through migration tracking, validation, Type B model creation, outbound API query, and transaction logging.
 - Use PostgreSQL views for multi-table curated objects such as `purchase_order_summary`.
 - Do not implement a multi-table Type B join engine in the MVP.
 - Keep IIoT and time-series storage out of this Manufacturing Data Platform MVP.

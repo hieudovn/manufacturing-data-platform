@@ -13,6 +13,7 @@ from app.api.data_model_templates import router as data_model_templates_router
 from app.api.db_browser import router as db_browser_router
 from app.api.health import router as health_router
 from app.api.inbound import router as inbound_router
+from app.api.jde_demo_workflow import router as jde_demo_workflow_router
 from app.api.migration_jobs import router as migration_jobs_router
 from app.api.migration_templates import router as migration_templates_router
 from app.api.outbound import router as outbound_router
@@ -52,6 +53,7 @@ app.include_router(admin_demo_router)
 app.include_router(data_models_router)
 app.include_router(data_model_templates_router)
 app.include_router(db_browser_router)
+app.include_router(jde_demo_workflow_router)
 app.include_router(api_keys_router)
 app.include_router(connections_router)
 app.include_router(migration_jobs_router)

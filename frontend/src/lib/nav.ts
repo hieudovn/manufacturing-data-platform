@@ -7,6 +7,7 @@ import {
   Repeat,
   Cable,
   ArrowRightLeft,
+  Workflow,
   UserRound,
   Palette,
   Users,
@@ -31,6 +32,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/transactions", label: "Transactions", desc: "Ingest / outbound log", icon: Repeat },
   { href: "/connections", label: "Connections", desc: "External systems", icon: Cable },
   { href: "/migration-jobs", label: "Migration Jobs", desc: "ora2pg tracking", icon: ArrowRightLeft },
+  { href: "/jde-demo", label: "JDE Demo Flow", desc: "Guided UAT", icon: Workflow },
   { href: "/users", label: "Users", desc: "Accounts & roles", icon: Users, adminOnly: true },
   { href: "/profile", label: "Profile", desc: "Sign-in & identity", icon: UserRound },
 ];

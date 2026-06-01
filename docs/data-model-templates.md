@@ -67,13 +67,30 @@ The PO line template uses `po_line_id` because the MVP mock staging table has th
 ## Demo Flow
 
 1. Seed demo procurement staging data.
-2. Open `Data Models`.
-3. Click `Create from Template`.
-4. Select `JDE Supplier Type B Model`.
-5. Review source table, primary key, and attributes.
-6. Create the model.
+2. Open `JDE Demo Flow`.
+3. Create the related Migration Job from template.
+4. Create the external run record.
+5. Validate the PostgreSQL target table/view.
+6. Create the Type B model from template.
 7. Preview the created model and verify `SUP-1001`.
 8. Repeat for `JDE Purchase Order Summary Type B Model` and verify `PO-2026-0001`.
+
+The same model creation can also be done from `Data Models` using `Create from Template`.
+
+## Guided Workflow Page
+
+The `JDE Demo Flow` page is a checklist for demo/UAT:
+
+- staging data readiness
+- migration job creation
+- migration run recording
+- target validation
+- Type B model creation
+- mapped preview
+- outbound API test
+- transaction log review
+
+This page does not execute ora2pg. It simulates migration with seeded staging data for demos and records external-run metadata for UAT.
 
 ## Production Notes
 
