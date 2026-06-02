@@ -89,7 +89,7 @@ Production deployment assets are included for a cloud server Docker Compose depl
 - `scripts/backup_postgres.sh`: timestamped PostgreSQL backup script.
 - `scripts/restore_postgres.sh`: PostgreSQL restore script.
 
-Production startup requires `APP_ENV=production` and rejects default or weak secrets. See [docs/deployment.md](docs/deployment.md) before deploying.
+Production startup requires `APP_ENV=production` and rejects default or weak secrets. See [docs/deployment.md](docs/deployment.md) for the deployment architecture and [docs/deployment-runbook.md](docs/deployment-runbook.md) for the Dev/Product deployment checklist from the release candidate tag.
 
 The frontend is now a Next.js App Router application migrated from the `Hieu123k/MDP-ver1.0` variant repository. Local development uses `NEXT_PUBLIC_API_URL=http://localhost:8000` to call FastAPI directly. Production leaves `NEXT_PUBLIC_API_URL` empty so the browser calls same-origin `/api/*`; Caddy strips `/api` and forwards requests to the original FastAPI root routes.
 
